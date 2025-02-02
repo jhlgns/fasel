@@ -1,0 +1,12 @@
+f := proc(a int, b int) {
+    return a + b
+}
+
+main := proc() {
+    x := 23
+    result := f(1, x)
+    result = result - 1
+
+    return result
+}
+
