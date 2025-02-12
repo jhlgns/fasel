@@ -119,7 +119,7 @@ Parser eat_keyword(Parser p, const char *kw)
     auto t   = next_token(&p);
     if (t.type != TOK_KEYWORD)
     {
-        return with_error(bak, nullptr, "Expected keyword '%s', got %s", kw, to_string(t.type));
+        return with_error(bak, nullptr, "Expected keyword '%s', got '%s'", kw, to_string(t.type));
     }
 
     auto len = strlen(kw);
@@ -129,7 +129,7 @@ Parser eat_keyword(Parser p, const char *kw)
     }
     if (strncmp(t.pos.c, kw, len) != 0)
     {
-        return with_error(bak, nullptr, "Expected keyword '%s', got %s", kw, to_string(t.type));
+        return with_error(bak, nullptr, "Expected keyword '%s', got '%s'", kw, to_string(t.type));
     }
 
     return p;
