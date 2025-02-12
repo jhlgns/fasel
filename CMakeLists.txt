@@ -10,7 +10,16 @@ set(CMAKE_CXX_COMPILER /usr/bin/clang++-18 CACHE FILEPATH "" FORCE)
 add_compile_options(-std=c++20 -stdlib=libc++)
 add_link_options(-std=c++20 -stdlib=libc++)
 
-add_executable(jang main.cpp)
+add_executable(jang
+    main.cpp
+    arena.cpp
+    compile.cpp
+    lex.cpp
+    parse.cpp
+    stringify.cpp
+    test.cpp
+    )
+target_include_directories(jang PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # target_compile_options(jang PUBLIC -fsanitize=address)
 # target_link_options(jang PUBLIC -fsanitize=address)
 
