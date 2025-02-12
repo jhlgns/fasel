@@ -1,8 +1,11 @@
 f := proc(a int, b int) {
-    return a + b
+    return a
 }
 
 main := proc() {
+    a := 1 + 2 * 3
+    b := 1 * 2 + 3
+    c := 1(f) * x(2) + 3
     x := 23
     result := f(1, x)
     result = result - 1
