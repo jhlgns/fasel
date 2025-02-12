@@ -447,6 +447,8 @@ Parser parse_program(Parser p, AstProgram *prog)
     const char *err = "Failed to parse program";
     auto bak        = p;
 
+    p.current_block = &prog->block;
+
     while (true)
     {
         auto decl = new AstDecl{};

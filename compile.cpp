@@ -64,11 +64,13 @@ void write_op(OpCode op, BytecodeWriter *w)
     if (w->generate_asm)
     {
         w->asm_source += std::format("{}\n", to_string(op));
+        if (w->also_generate_bytecode == false)
+        {
+            return;
+        }
     }
-    else
-    {
-        _write8(op, w);
-    }
+
+    _write8(op, w);
 }
 
 void write_op_8(OpCode op, uint8_t value, BytecodeWriter *w)
@@ -76,12 +78,14 @@ void write_op_8(OpCode op, uint8_t value, BytecodeWriter *w)
     if (w->generate_asm)
     {
         w->asm_source += std::format("{} {}\n", to_string(op), value);
+        if (w->also_generate_bytecode == false)
+        {
+            return;
+        }
     }
-    else
-    {
-        _write8(op, w);
-        _write8(value, w);
-    }
+
+    _write8(op, w);
+    _write8(value, w);
 }
 
 void write_op_64(OpCode op, int64_t value, BytecodeWriter *w)
@@ -89,12 +93,14 @@ void write_op_64(OpCode op, int64_t value, BytecodeWriter *w)
     if (w->generate_asm)
     {
         w->asm_source += std::format("{} {}\n", to_string(op), value);
+        if (w->also_generate_bytecode == false)
+        {
+            return;
+        }
     }
-    else
-    {
-        _write8(op, w);
-        _write64(value, w);
-    }
+
+    _write8(op, w);
+    _write64(value, w);
 }
 
 void compile_error(BytecodeWriter *w, std::string_view message)
@@ -186,6 +192,8 @@ bool is_expression(AstKind kind)
         {
             auto block = static_cast<AstBlock *>(node);
 
+            auto is_global = block->parent_block == nullptr;
+
             // TODO: Nested blocks for if-statements and raw blocks etc.
 
             /*
@@ -195,23 +203,27 @@ bool is_expression(AstKind kind)
             RSP = 14
             */
 
-        // Allocate locals
-            int64_t cursor = 0;
-            for (auto i = 0; i < block->statements.size(); ++i)
+            // Allocate locals
+            if (is_global == false)  // Only if we are not compiling the top level program pseudo-block
             {
-                auto statement = block->statements[block->statements.size() - 1 - i];
-                if (statement->kind != AST_DECL)
-                    continue;
+                int64_t cursor = 0;
+                for (auto i = 0; i < block->statements.size(); ++i)
+                {
+                    auto statement = block->statements[block->statements.size() - 1 - i];
+                    if (statement->kind != AST_DECL)
+                        continue;
 
-                auto decl = static_cast<AstDecl *>(statement);
+                    auto decl = static_cast<AstDecl *>(statement);
 
-                if (decl->is_global == false)
-                {  // Only if we are not compiling the top level program pseudo-block
+                    assert(decl->is_global == is_global);
+
                     auto size_of_decl = 8;  // TODO
                     cursor -= size_of_decl;
 
                     decl->address = cursor;
                 }
+
+                write_op_64(ADDRSP, -cursor, w);
             }
 
             auto prev_block  = w->current_block;
@@ -337,4 +349,3 @@ bool is_expression(AstKind kind)
 
     return false;
 }
-

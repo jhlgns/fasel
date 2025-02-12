@@ -1,7 +1,7 @@
 #pragma once
 
-#include <vector>
 #include "lex.h"
+#include <vector>
 
 enum AstKind
 {
@@ -33,8 +33,9 @@ inline const char *to_string(AstKind kind)
         case AST_PROC_SIGNATURE: return "AST_PROC_SIGNATURE";
         case AST_PROGRAM:        return "AST_PROGRAM";
         case AST_RETURN:         return "AST_RETURN";
-        default:                 assert(false);
     }
+
+    assert(false);
 }
 
 struct AstNode
@@ -45,7 +46,7 @@ struct AstNode
     {
     }
 
-    AstKind kind;
+    AstKind kind{};
 };
 
 struct AstDecl : AstNode
@@ -63,8 +64,7 @@ struct AstDecl : AstNode
     bool is_global{};
     int64_t address{};  // In case of a procedure-local declaration this is the offset from RSP after the the locals have been
                         // allocated (so it is always going to be a negative number). In case of a global declaration (is_global
-                        // == false), this is the address of the symbol relative to the main memory start.
-    /* size_t global_address; */
+                        // == true), this is the address of the symbol relative to the main memory start.
 };
 
 struct AstBinOp : AstNode
@@ -74,9 +74,9 @@ struct AstBinOp : AstNode
     {
     }
 
-    AstNode *lhs;
-    AstNode *rhs;
-    TokenType binop;
+    AstNode *lhs{};
+    AstNode *rhs{};
+    TokenType binop{};
 };
 
 struct AstArg : AstNode
@@ -86,8 +86,8 @@ struct AstArg : AstNode
     {
     }
 
-    Token ident;
-    Token type;
+    Token ident{};
+    Token type{};
 };
 
 enum AstLiteralType
@@ -105,9 +105,9 @@ struct AstLiteral : AstNode
     {
     }
 
-    Token token;
-    AstLiteralType type;
-    int64_t int_value;
+    Token token{};
+    AstLiteralType type{};
+    int64_t int_value{};
 };
 
 struct AstProcSignature : AstNode
@@ -117,7 +117,7 @@ struct AstProcSignature : AstNode
     {
     }
 
-    std::vector<AstArg> arguments;
+    std::vector<AstArg> arguments{};
 };
 
 struct AstBlock : AstNode
@@ -127,10 +127,10 @@ struct AstBlock : AstNode
     {
     }
 
-    std::vector<AstNode *> statements;
+    std::vector<AstNode *> statements{};
 
     // Compiler information
-    AstBlock *parent_block;
+    AstBlock *parent_block{};
     /* size_t base_address; */
 };
 
@@ -141,7 +141,7 @@ struct AstReturn : AstNode
     {
     }
 
-    AstNode *expr;
+    AstNode *expr{};
 };
 
 struct AstIdent : AstNode
@@ -151,7 +151,7 @@ struct AstIdent : AstNode
     {
     }
 
-    Token ident;
+    Token ident{};
 };
 
 struct AstProc : AstNode
@@ -161,8 +161,8 @@ struct AstProc : AstNode
     {
     }
 
-    AstProcSignature signature;
-    AstBlock body;
+    AstProcSignature signature{};
+    AstBlock body{};
 };
 
 struct AstProcCall : AstNode
@@ -172,8 +172,8 @@ struct AstProcCall : AstNode
     {
     }
 
-    AstNode *proc;
-    std::vector<AstNode *> arguments;
+    AstNode *proc{};
+    std::vector<AstNode *> arguments{};
 };
 
 struct AstProgram : AstNode
@@ -183,8 +183,7 @@ struct AstProgram : AstNode
     {
     }
 
-    AstBlock block;
+    AstBlock block{};
 };
 
 bool parse_program(std::string_view source, AstProgram *prog);
-

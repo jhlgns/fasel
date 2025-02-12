@@ -18,6 +18,7 @@ add_executable(jang
     parse.cpp
     stringify.cpp
     test.cpp
+    vm.cpp
     )
 target_include_directories(jang PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # target_compile_options(jang PUBLIC -fsanitize=address)
