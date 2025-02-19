@@ -25,13 +25,19 @@ void *arena_alloc(size_t bytes)
         abort();
     }
 
-    char *result = arena.cursor;
+    auto result = arena.cursor;
     arena.cursor += bytes;
 
     // TODO: Alignment?
     /* memset(result, 0x0, bytes); */
 
     return result;
+}
+
+std::span<char> arena_alloc_span(size_t bytes)
+{
+    auto result = static_cast<char *>(arena_alloc(bytes));
+    return std::span<char>{result, bytes};
 }
 
 void reset_arena()

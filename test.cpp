@@ -71,6 +71,70 @@ main := proc() {
     write_op(ADD, &mock);
     write_op_64(STORER, c, &mock);
     write_op_64(LOADR, c, &mock);
+    write_op_64(ADDRSP, -24, &mock);
+    write_op(RET, &mock);
+
+    test_codegen(source, &mock);
+}
+
+void implicit_return()
+{
+    auto source = std::string_view{
+        R"(
+main := proc() {
+    a := 1
+}
+)"};
+
+    BytecodeWriter mock;
+
+    write_op_64(ADDRSP, 8, &mock);
+    write_op_64(PUSHC, 1, &mock);
+    write_op_64(STORER, -8, &mock);
+    write_op(RET, &mock);
+
+    test_codegen(source, &mock);
+}
+
+void nested_blocks()
+{
+    auto source = std::string_view{
+        R"(
+main := proc() {
+    a := 1
+
+    {
+        b := 2
+        c := 3
+    }
+
+    d := 4
+
+    {
+        e := 5
+    }
+}
+)"};
+
+    auto a = -32;
+    auto b = -16;
+    auto c = -8;
+    auto d = -24;
+    auto e = -16;
+
+    BytecodeWriter mock;
+
+    write_op_64(ADDRSP, 32, &mock);
+    write_op_64(PUSHC, 1, &mock);
+    write_op_64(STORER, a, &mock);
+    write_op_64(PUSHC, 2, &mock);
+    write_op_64(STORER, b, &mock);
+    write_op_64(PUSHC, 3, &mock);
+    write_op_64(STORER, c, &mock);
+    write_op_64(PUSHC, 4, &mock);
+    write_op_64(STORER, d, &mock);
+    write_op_64(PUSHC, 5, &mock);
+    write_op_64(STORER, d, &mock);
     write_op(RET, &mock);
 
     test_codegen(source, &mock);
@@ -79,4 +143,6 @@ main := proc() {
 void test()
 {
     basic_locals();
+    implicit_return();
+    nested_blocks();
 }

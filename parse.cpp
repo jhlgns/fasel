@@ -2,12 +2,13 @@
 #include "arena.h"
 #include "basics.h"
 #include <charconv>
-#include <span>
+#include <format>
+#include <iostream>
 
 struct Parser
 {
     Lexer lexer;
-    std::span<char *> errors;
+    std::string error;  // TODO: Make this an arena allocated string_view
     struct AstBlock *current_block;
 };
 
@@ -16,62 +17,38 @@ Token next_token(Parser *parser)
     return next_token(&parser->lexer);
 }
 
-// Attaches the errors of new to the errors of bak, returns bak.
-Parser with_error(Parser bak, Parser *errored, const char *format, ...)
+Parser copy_error(Parser bak, std::string_view error)
 {
-    assert(bak.errors.size() == 0);
+    bak.error = error;
+    return bak;
+}
 
-    char fmt[4096] = {0};
-
-    auto next        = next_token(&bak);
+Parser add_error(Parser bak, std::string_view error)
+{
+    auto next       = next_token(&bak);
     auto line_start = next.pos.c;
-    auto line_end   = next.pos.c;
     while (line_start + 1 > bak.lexer.source && *(line_start - 1) != '\n')
+    {
         --line_start;
+    }
+
     while (*line_start != '\n' && (*line_start == ' ' || *line_start == '\t'))
+    {
         ++line_start;
-    while (*line_end != '\n' && (line_end - bak.lexer.source.data()) <= bak.lexer.source.size())
+    }
+
+    auto line_end = next.pos.c;
+    while (*(line_end + 1) != '\n' && line_end + 1 < bak.lexer.source.data())
+    {
         ++line_end;
-    char line[1024] = {0};
-    strncpy(line, line_start, line_end - line_start);  // TODO: Max 1024
-
-    snprintf(
-        fmt,
-        sizeof(fmt),
-        "Parser error at %d:%d (line: '%s'): %s",
-        (int)bak.lexer.at.line,
-        (int)bak.lexer.at.line_offset,
-        line,
-        format);
-
-    va_list va;
-    va_start(va, format);
-    char msg[4096] = {0};
-    vsnprintf(msg, sizeof(msg), fmt, va);
-    va_end(va);
-
-    if (errored != nullptr && errored->errors.size() > 0)
-    {
-        size_t errors_len = 1 + errored->errors.size();
-        auto es           = static_cast<char **>(arena_alloc(sizeof(char *) * errors_len));
-        bak.errors        = std::span{es, errors_len};
-        bak.errors[0]     = static_cast<char *>(arena_alloc(strlen(msg) + 1));
-        strcpy(bak.errors[0], msg);
-
-        for (int i = 0; i < errored->errors.size(); ++i)
-        {
-            bak.errors[1 + i] = (char *)arena_alloc(strlen(errored->errors[i]) + 1);
-            strcpy(bak.errors[1 + i], errored->errors[i]);
-        }
     }
-    else
-    {
-        size_t errors_len = 1;
-        auto es           = static_cast<char **>(arena_alloc(sizeof(char *) * errors_len));
-        bak.errors        = std::span{es, errors_len};
-        bak.errors[0]     = static_cast<char *>(arena_alloc(strlen(msg) + 1));
-        strcpy(bak.errors[0], msg);
-    }
+
+    /* auto line = static_cast<char *>(arena_alloc(line_end - line_start + 1)); */
+    /* strcpy(line, line_start); */
+
+    auto line = std::string_view{line_start, line_end};
+    assert(line.find("\n") == std::string_view::npos);
+    bak.error = std::format("Parser error at {}:{}\n{}\n{}", bak.lexer.at.line, bak.lexer.at.line_offset, line, error);
 
     return bak;
 }
@@ -82,12 +59,7 @@ Parser eat_token(Parser p, TokenType type, Token *token)
     auto t   = next_token(&p);
     if (t.type != type)
     {
-        char tkn[1024];
-        size_t len = sizeof(tkn);
-        if (t.len < len)
-            len = t.len;
-        strncpy(tkn, t.pos.c, len);
-        return with_error(bak, nullptr, "Expected %s, got %s (%s)", to_string(type), to_string(t.type), tkn);
+        return add_error(bak, std::format("Expected {}, got {} ({})", to_string(type), to_string(t.type), text_of(&t)));
     }
 
     if (token != nullptr)
@@ -119,7 +91,7 @@ Parser eat_keyword(Parser p, const char *kw)
     auto t   = next_token(&p);
     if (t.type != TOK_KEYWORD)
     {
-        return with_error(bak, nullptr, "Expected keyword '%s', got '%s'", kw, to_string(t.type));
+        return add_error(bak, std::format("Expected keyword '{}', got '{}'", kw, to_string(t.type)));
     }
 
     auto len = strlen(kw);
@@ -129,7 +101,7 @@ Parser eat_keyword(Parser p, const char *kw)
     }
     if (strncmp(t.pos.c, kw, len) != 0)
     {
-        return with_error(bak, nullptr, "Expected keyword '%s', got '%s'", kw, to_string(t.type));
+        return add_error(bak, std::format("Expected keyword '{}', got '{}'", kw, to_string(t.type)));
     }
 
     return p;
@@ -137,13 +109,13 @@ Parser eat_keyword(Parser p, const char *kw)
 
 bool advance(Parser *p, Parser parsed, bool require)
 {
-    assert(p->errors.size() == 0);
+    assert(p->error.empty());
 
-    if (parsed.errors.size() != 0 || parsed.lexer.at.c <= p->lexer.at.c)
+    if (parsed.error.empty() == false || parsed.lexer.at.c <= p->lexer.at.c)
     {
         if (require)
         {
-            p->errors = parsed.errors;
+            p->error = parsed.error;
         }
 
         return false;
@@ -165,11 +137,11 @@ bool maybe(Parser *p, Parser parsed)
 
 Parser parse_expr(Parser p, AstNode **out_expr);
 Parser parse_decl(Parser p, AstDecl *out_decl);
+Parser parse_block(Parser p, AstBlock *out_block);
 
 Parser parse_statement(Parser p, AstNode **out_statement)
 {
-    auto bak        = p;
-    const char *err = "Failed to parse statement";
+    auto bak = p;
 
     AstDecl decl{};
     if (maybe(&p, parse_decl(p, &decl)))
@@ -182,14 +154,13 @@ Parser parse_statement(Parser p, AstNode **out_statement)
 
     if (maybe(&p, eat_keyword(p, "return")))
     {
-        auto ret = new AstReturn;
-        if (must(&p, parse_expr(p, &ret->expr)) == false)
+        AstReturn ret{};
+        if (must(&p, parse_expr(p, &ret.expr)) == false)
         {
-            delete ret;
-            return with_error(bak, &p, err);
+            return copy_error(bak, p.error);
         }
 
-        *out_statement = ret;
+        *out_statement = new AstReturn{ret};
         return p;
     }
 
@@ -200,13 +171,19 @@ Parser parse_statement(Parser p, AstNode **out_statement)
         return p;
     }
 
-    return with_error(bak, nullptr, err);
+    AstBlock block{};
+    if (maybe(&p, parse_block(p, &block)))
+    {
+        *out_statement = new AstBlock{std::move(block)};
+        return p;
+    }
+
+    return add_error(bak, "Failed to parse statement");
 }
 
 Parser parse_block(Parser p, AstBlock *out_block)
 {
-    auto bak        = p;
-    const char *err = "Failed to parse block";
+    auto bak = p;
 
     out_block->parent_block = p.current_block;
     p.current_block         = out_block;
@@ -217,7 +194,7 @@ Parser parse_block(Parser p, AstBlock *out_block)
 
     if (must(&p, eat_token(p, '{')) == false)
     {
-        return with_error(bak, &p, err);
+        return copy_error(bak, p.error);
     }
 
     while (true)
@@ -230,7 +207,7 @@ Parser parse_block(Parser p, AstBlock *out_block)
         AstNode *stmt = nullptr;
         if (must(&p, parse_statement(p, &stmt)) == false)
         {
-            return with_error(bak, &p, err);
+            return copy_error(bak, p.error);
         }
 
         out_block->statements.push_back(stmt);
@@ -239,27 +216,78 @@ Parser parse_block(Parser p, AstBlock *out_block)
     return p;
 }
 
+Parser parse_proc(Parser p, AstProc *out_proc)
+{
+    auto bak = p;
+
+    if (maybe(&p, eat_keyword(p, "proc")) == false)
+    {
+        return copy_error(bak, p.error);
+    }
+    if (must(&p, eat_token(p, '(')) == false)
+    {
+        return copy_error(bak, p.error);
+    }
+
+    while (true)
+    {
+        bool done = false;
+        auto bak  = p;
+        switch (next_token(&p).type)
+        {
+            case ',': break;  // TODO: Allows for ',' at beginning of parameter list
+            case ')': done = 1; break;
+            default:  p = bak; break;
+        }
+
+        if (done)
+        {
+            break;
+        }
+
+        AstArg arg{};
+        if (must(&p, eat_token(p, TOK_IDENT, &arg.ident)) == false)
+        {
+            return copy_error(bak, p.error);
+        }
+
+        if (must(&p, eat_token(p, TOK_IDENT, &arg.type)) == false)
+        {
+            return copy_error(bak, p.error);
+        }
+
+        out_proc->signature.arguments.push_back(arg);
+    }
+
+    out_proc->body.is_proc_body = true;
+    if (must(&p, parse_block(p, &out_proc->body)) == false)
+    {
+        return copy_error(bak, p.error);
+    }
+
+    return p;
+}
+
 Parser parse_primary_expr(Parser p, AstNode **out_primary_expr)
 {
-    auto bak        = p;
-    const char *err = "Failed to parse primary expression";
+    auto bak = p;
 
     Token t;
     if (maybe(&p, eat_token(p, TOK_NUM_LIT, &t)))
     {
-        AstLiteral *literal = new AstLiteral;
-        literal->token      = t;
-        literal->type       = LIT_INT;
+        auto literal   = new AstLiteral{};
+        literal->token = t;
+        literal->type  = LIT_INT;
 
         auto result = std::from_chars(t.pos.c, t.pos.c + t.len, literal->int_value);
         if (result.ec != std::errc{})
         {
-            return with_error(bak, nullptr, "Failed to parse integer literal");
+            return add_error(bak, "Failed to parse integer literal");
         }
 
         if (result.ptr != t.pos.c + t.len)
         {
-            return with_error(bak, nullptr, "Failed to parse integer literal");
+            return add_error(bak, "Failed to parse integer literal");
         }
 
         *out_primary_expr = literal;
@@ -268,69 +296,30 @@ Parser parse_primary_expr(Parser p, AstNode **out_primary_expr)
 
     if (maybe(&p, eat_token(p, TOK_IDENT, &t)))
     {
-        AstIdent *ident   = new AstIdent;
+        auto ident        = new AstIdent{};
         ident->ident      = t;
         *out_primary_expr = ident;
         return p;
     }
 
-    if (maybe(&p, eat_keyword(p, "proc")))
+    AstProc proc{};
+    if (maybe(&p, parse_proc(p, &proc)))
     {
-        if (must(&p, eat_token(p, '(')) == false)
-        {
-            return with_error(bak, &p, err);
-        }
-
-        auto proc = new AstProc;
-        while (true)
-        {
-            bool done = false;
-            auto bak  = p;
-            switch (next_token(&p).type)
-            {
-                case ',': break;  // TODO: Allows for ',' at beginning of parameter list
-                case ')': done = 1; break;
-                default:  p = bak; break;
-            }
-
-            if (done)
-                break;
-
-            AstArg arg = {};
-            if (must(&p, eat_token(p, TOK_IDENT, &arg.ident)) == false)
-            {
-                return with_error(bak, &p, err);
-            }
-
-            if (must(&p, eat_token(p, TOK_IDENT, &arg.type)) == false)
-            {
-                return with_error(bak, &p, err);
-            }
-
-            proc->signature.arguments.push_back(arg);
-        }
-
-        if (must(&p, parse_block(p, &proc->body)) == false)
-        {
-            return with_error(bak, &p, err);
-        }
-
-        *out_primary_expr = proc;
+        *out_primary_expr = new AstProc{proc};
         return p;
     }
 
-    return with_error(bak, nullptr, err);
+    return add_error(bak, "Failed to parse primary expression");
 }
 
 Parser parse_suffix_expr(Parser p, AstNode *lhs, AstNode **node)
 {
-    const char *err = "Failed to parse suffix expression";
-    auto bak        = p;
+    auto bak = p;
 
     if (maybe(&p, eat_token(p, '(')))
     {
-        auto call  = new AstProcCall;
-        call->proc = lhs;
+        AstProcCall call{};
+        call.proc = lhs;
 
         auto is_end = false;
         while (true)
@@ -341,16 +330,16 @@ Parser parse_suffix_expr(Parser p, AstNode *lhs, AstNode **node)
             }
             else if (is_end)
             {
-                return with_error(bak, &p, err);
+                return copy_error(bak, p.error);
             }
 
             AstNode *argument;
             if (must(&p, parse_expr(p, &argument)) == false)
             {
-                return with_error(bak, &p, err);
+                return copy_error(bak, p.error);
             }
 
-            call->arguments.push_back(argument);
+            call.arguments.push_back(argument);
 
             if (maybe(&p, eat_token(p, ',')) == false)
             {
@@ -358,22 +347,21 @@ Parser parse_suffix_expr(Parser p, AstNode *lhs, AstNode **node)
             }
         }
 
-        *node = call;
+        *node = new AstProcCall{std::move(call)};
         return p;
     }
 
-    return with_error(bak, nullptr, err);
+    return add_error(bak, "Failed to parse suffix expression");
 }
 
 Parser parse_binary_expr(Parser p, AstNode **node, int prev_prec)
 {
-    auto bak        = p;
-    const char *err = "Failed to parse expression";
+    auto bak = p;
 
     AstNode *lhs;
     if (must(&p, parse_primary_expr(p, &lhs)) == false)
     {
-        return with_error(bak, &p, err);
+        return copy_error(bak, p.error);
     }
     maybe(&p, parse_suffix_expr(p, lhs, &lhs));
 
@@ -393,10 +381,10 @@ Parser parse_binary_expr(Parser p, AstNode **node, int prev_prec)
         AstNode *rhs;
         if (must(&p, parse_binary_expr(p, &rhs, prec)) == false)
         {
-            return with_error(bak, &p, "Failed to parse binary operator right hand side");
+            return add_error(bak, "Failed to parse binary operator right hand side");
         }
 
-        auto bin_op   = new AstBinOp;
+        auto bin_op   = new AstBinOp{};
         bin_op->binop = op.type;
         bin_op->lhs   = lhs;
         bin_op->rhs   = rhs;
@@ -416,24 +404,23 @@ Parser parse_expr(Parser p, AstNode **node)
 
 Parser parse_decl(Parser p, AstDecl *decl)
 {
-    auto bak        = p;
-    const char *err = "Failed to parse declaration";
+    auto bak = p;
 
     Token ident;
     if (must(&p, eat_token(p, TOK_IDENT, &ident)) == false)
     {
-        return with_error(bak, &p, err);
+        return copy_error(bak, p.error);
     }
 
     if (must(&p, eat_token(p, TOK_DECLASSIGN)) == false)
     {
-        return with_error(bak, &p, err);
+        return copy_error(bak, p.error);
     }
 
     AstNode *init_expr;
     if (must(&p, parse_expr(p, &init_expr)) == false)
     {
-        return with_error(bak, &p, err);
+        return copy_error(bak, p.error);
     }
 
     decl->ident     = ident;
@@ -444,8 +431,7 @@ Parser parse_decl(Parser p, AstDecl *decl)
 
 Parser parse_program(Parser p, AstProgram *prog)
 {
-    const char *err = "Failed to parse program";
-    auto bak        = p;
+    auto bak = p;
 
     p.current_block = &prog->block;
 
@@ -454,7 +440,7 @@ Parser parse_program(Parser p, AstProgram *prog)
         auto decl = new AstDecl{};
         if (must(&p, parse_decl(p, decl)) == false)
         {
-            return with_error(bak, &p, err);
+            return copy_error(bak, p.error);
         }
 
         decl->is_global = true;
@@ -462,7 +448,7 @@ Parser parse_program(Parser p, AstProgram *prog)
 
         reset_arena();
 
-        Token next = next_token(&p);
+        auto next = next_token(&p);
         if (next.type == TOK_EOF)
         {
             return p;
@@ -485,20 +471,21 @@ bool parse_program(std::string_view source, AstProgram *prog)
 
     if (must(&p, parse_program(p, prog)) == false)
     {
-        printf("Failed to parse the program\n");
-
-        for (int i = 0; i < p.errors.size(); ++i)
-        {
-            for (int j = 0; j < i * 4; ++j)
-            {
-                printf(" ");
-            }
-
-            printf("%s\n", p.errors[i]);
-        }
+        std::cout << p.error << std::endl;
 
         return false;
     }
 
     return true;
 }
+
+/* Parser parse_brogram(Parser p, void *brogram) */
+/* { */
+/*     auto bak = p; */
+
+/*     if (maybe(&p, eat_keyword(p, "")) == false) */
+/*     { */
+/*         // Error parsing brogram: expected keyword */
+/*         return add_error(bak, p.error); */
+/*     } */
+/* } */

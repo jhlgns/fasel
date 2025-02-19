@@ -127,11 +127,13 @@ struct AstBlock : AstNode
     {
     }
 
+    bool is_proc_body{};
     std::vector<AstNode *> statements{};
 
     // Compiler information
     AstBlock *parent_block{};
-    /* size_t base_address; */
+    int64_t offset_from_parent_block;
+    int64_t size{};
 };
 
 struct AstReturn : AstNode

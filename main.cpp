@@ -84,7 +84,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    printf("Program:\n%s\n", dump_node(0, &program).data());
+    /* printf("Program:\n%s\n", dump_node(0, &program).data()); */
 
     BytecodeWriter w{
         .current_block = &program.block,

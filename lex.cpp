@@ -123,11 +123,11 @@ Token next_token(Lexer *l)
     }
 
     printf("Lexer error at %d:%d: unable to parse token.\n", l->at.line, l->at.line_offset);
-    for (auto c = l->at.c; *c && (c - l->at.c) < 5; ++c)
-    {
-        printf("%c", *c);
-    }
-    printf("...\n");
+    /* for (auto c = l->at.c; *c && (c - l->at.c) < 5; ++c) */
+    /* { */
+    /*     printf("%c", *c); */
+    /* } */
+    /* printf("...\n"); */
     next(&l->at);
 
     return emit(l, TOK_EOF);
