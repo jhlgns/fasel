@@ -16,6 +16,7 @@ struct BytecodeWriter
 {
     std::vector<uint8_t> bytecode{};
     struct AstBlock *current_block{};
+    struct AstProc *current_proc{};
     /* std::vector<SymbolAddressPlaceholder> saps; */
 
     bool generate_asm{};
@@ -29,4 +30,3 @@ void write_op_8(OpCode op, uint8_t value, BytecodeWriter *w);
 void write_op_64(OpCode op, int64_t value, BytecodeWriter *w);
 
 [[nodiscard]] bool generate_code(struct AstNode *node, BytecodeWriter *w);
-

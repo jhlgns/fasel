@@ -9,15 +9,12 @@
 #include "compile.h"
 #include "parse.h"
 #include "stringify.h"
-#include "test.h"
 
 int main(int argc, char **argv)
 {
     printf("This is the Janguage compiler.\n");
 
     init_arena();
-
-    test();
 
     if (argc != 2)
     {

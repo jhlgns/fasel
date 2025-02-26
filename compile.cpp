@@ -27,90 +27,28 @@ AstDecl *find_decl(AstBlock *block, std::string_view name)
     return nullptr;
 }
 
+// TODO: We have to differentiate if we want to include the node itself
+// if it is a block...
 std::vector<AstBlock *> get_child_blocks(AstNode *node)
 {
     switch (node->kind)
     {
-        case AST_BLOCK: return {static_cast<AstBlock *>(node)};
+        case AST_BLOCK:
+        {
+            auto block = static_cast<AstBlock *>(node);
+            return {block};
+        }
+
         // TODO: Handle AST_IF, AST_WHILE etc. once they are implemented
         default: return {};
     }
 }
 
-void calculate_allocations(AstBlock *block, int64_t root_block_size = -1)
-{
-    // TODO: Offset by block offset from parent block
-
-    /*
-    a: int32 = 1  // RSP - 20 | 0
-    b: int64 = 2  // RSP - 16 | 4
-    c: int16 = 3  // RSP - 8  | 12
-    {  // base = 12
-        d: int32 = 4  // RSP - 4 | 16
-    }
-    {  // base = 12
-        e: int32 = 5  // RSP - 4 | 16
-    }
-    RSP = 20
-    */
-
-    // Calculate addresses of this block's declarations
-    int64_t cursor = 0;
-    for (auto statement : block->statements)
-    {
-        if (statement->kind != AST_DECL)
-        {
-            continue;
-        }
-
-        auto decl = static_cast<AstDecl *>(statement);
-
-        decl->address = block->offset_from_parent_block + cursor;
-
-        auto size_of_decl = 8;  // TODO
-        cursor += size_of_decl;
-    }
-
-    assert(block->size >= cursor);
-
-    if (root_block_size == -1)
-    {
-        root_block_size = block->size;
-    }
-
-    // Calculate allocations of child blocks
-    for (auto statement : block->statements)
-    {
-        auto child_blocks = get_child_blocks(statement);
-        for (auto child_block : child_blocks)
-        {
-            child_block->offset_from_parent_block = cursor;
-            calculate_allocations(child_block, root_block_size);
-        }
-    }
-
-    // Now make the addresses of the declarations relative to the stack pointer
-    for (auto statement : block->statements)
-    {
-        if (statement->kind != AST_DECL)
-        {
-            continue;
-        }
-
-        auto decl = static_cast<AstDecl *>(statement);
-
-        decl->address -= root_block_size;
-    }
-}
-
-void calculate_size(AstBlock *block)
+void allocate_locals(AstBlock *block)
 {
     assert(block->size == 0);
+    assert(block->is_global() == false);
 
-    auto is_global = block->parent_block == nullptr;
-    assert(is_global == false);
-
-    // Calculate the total size of all local declarations
     for (auto statement : block->statements)
     {
         if (statement->kind != AST_DECL)
@@ -119,9 +57,9 @@ void calculate_size(AstBlock *block)
         }
 
         auto decl = static_cast<AstDecl *>(statement);
-        assert(decl->is_global == is_global);
 
         auto size_of_decl = 8;  // TODO
+        decl->address     = block->offset_from_parent_block + block->size;
         block->size += size_of_decl;
     }
 
@@ -132,7 +70,9 @@ void calculate_size(AstBlock *block)
         auto child_blocks = get_child_blocks(statement);
         for (auto child_block : child_blocks)
         {
-            calculate_size(child_block);
+            child_block->offset_from_parent_block = block->offset_from_parent_block + block->size;
+
+            allocate_locals(child_block);
 
             if (child_block->size > max_child_block_size)
             {
@@ -253,25 +193,6 @@ bool is_expression(AstKind kind)
 
         case AST_IDENT:
         {
-            /*
-            main := proc() {
-                // a has ofset -16 from RSP while calling main
-                a := 0
-
-                // b has offset -8 from RSP
-                b := 123
-
-                if true {
-                    c := 532
-
-                    // a found in parent block
-                    a = 8
-                } else {
-                    a := 8
-                }
-            }
-            */
-
             auto ident = static_cast<AstIdent *>(node);
 
             auto decl = find_decl(w->current_block, text_of(&ident->ident));
@@ -281,9 +202,8 @@ bool is_expression(AstKind kind)
                 return false;
             }
 
-            assert(decl->address <= 0);  // TODO: This is not right for proc calls and for global variables
-
-            write_op_64(LOADR, decl->address, w);
+            auto address_relative_to_rsp = decl->address - decl->proc->body.size;
+            write_op_64(LOADR, address_relative_to_rsp, w);
             /* write64(decl->, w); */  // TODO
 
             return true;
@@ -292,16 +212,6 @@ bool is_expression(AstKind kind)
         case AST_BLOCK:
         {
             auto block = static_cast<AstBlock *>(node);
-
-            auto is_global = block->parent_block == nullptr;
-
-            // Allocate locals
-            if (is_global == false)  // Only if we are not compiling the top level program pseudo-block
-            {
-                calculate_size(block);
-                calculate_allocations(block);
-                write_op_64(ADDRSP, block->size, w);
-            }
 
             auto prev_block  = w->current_block;
             w->current_block = block;
@@ -318,7 +228,10 @@ bool is_expression(AstKind kind)
                     return false;
                 }
 
-                got_return = statement->kind == AST_RETURN;
+                if (got_return == false && statement->kind == AST_RETURN)
+                {
+                    got_return = true;
+                }
             }
 
             if (block->is_proc_body && got_return == false)
@@ -335,9 +248,12 @@ bool is_expression(AstKind kind)
         {
             auto decl = static_cast<AstDecl *>(node);
 
+            assert(decl->proc == nullptr);
+            decl->proc = w->current_proc;
+
             /* assert((decl->is_global == false) == (decl->address < 0)); */
 
-            if (decl->is_global)
+            if (w->current_block->is_global())
             {
                 auto address = w->bytecode.size();
                 if (generate_code(decl->init_expr, w) == false)
@@ -354,7 +270,8 @@ bool is_expression(AstKind kind)
                     return false;
                 }
 
-                write_op_64(STORER, decl->address, w);
+                auto address_relative_to_rsp = decl->address - decl->proc->body.size;
+                write_op_64(STORER, address_relative_to_rsp, w);
             }
 
             return true;
@@ -377,8 +294,20 @@ bool is_expression(AstKind kind)
 
         case AST_PROC:
         {
-            // TODO!
             auto proc = static_cast<AstProc *>(node);
+
+            auto prev_proc  = w->current_proc;
+            w->current_proc = proc;
+            defer
+            {
+                w->current_proc = prev_proc;
+            };
+
+            allocate_locals(&proc->body);
+
+            // Make stack space for the locals
+            write_op_64(ADDRSP, proc->body.size, w);
+
             return generate_code(&proc->body, w);
         }
 

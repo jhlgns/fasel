@@ -8,9 +8,20 @@
             "type": "lldb",
             "request": "launch",
             "preLaunchTask": "build",
-            "name": "Debug",
+            "name": "Debug compiler",
             "program": "${workspaceFolder}/build/jang",
             "args": ["../example.jan"],
+            "cwd": "${workspaceFolder}/build"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "name": "Debug tests",
+            "program": "${workspaceFolder}/build/tests",
+            //"args": ["Basic locals"],
+            //"args": ["Implicit return"],
+            "args": ["Nested blocks 2"],
             "cwd": "${workspaceFolder}/build"
         }
     ]

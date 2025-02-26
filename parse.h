@@ -60,11 +60,15 @@ struct AstDecl : AstNode
     AstNode *init_expr{};
 
     // Compiler information
+
     struct AstBlock *block{};
-    bool is_global{};
-    int64_t address{};  // In case of a procedure-local declaration this is the offset from RSP after the the locals have been
-                        // allocated (so it is always going to be a negative number). In case of a global declaration (is_global
-                        // == true), this is the address of the symbol relative to the main memory start.
+    struct AstProc *proc{};
+    /* bool is_global{}; */
+    int64_t address{};  // Global declaration: address inside the program
+                        // Local declaration (procedure): offset from procedure stack base
+    /* int64_t root_block_size{};  // Local declaration: the size of the block that has the memory this declaration
+     * lives in (in case of */
+    /*                             // procedures, this is the procedure body), 0 for global declarations */
 };
 
 struct AstBinOp : AstNode
@@ -132,9 +136,12 @@ struct AstBlock : AstNode
 
     // Compiler information
     AstBlock *parent_block{};
-    int64_t offset_from_parent_block;
+    int64_t offset_from_parent_block{};
     int64_t size{};
+
+    bool is_global() const { return this->parent_block == nullptr; }
 };
+
 
 struct AstReturn : AstNode
 {

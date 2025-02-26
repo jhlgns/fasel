@@ -443,7 +443,6 @@ Parser parse_program(Parser p, AstProgram *prog)
             return copy_error(bak, p.error);
         }
 
-        decl->is_global = true;
         prog->block.statements.push_back(decl);
 
         reset_arena();
