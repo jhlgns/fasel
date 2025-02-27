@@ -5,12 +5,13 @@
 
 enum AstKind
 {
+    AST_ARG,
     AST_BIN_OP,
     AST_BLOCK,
     AST_DECL,
     AST_IDENT,
+    AST_IF,
     AST_LITERAL,
-    AST_ARG,
     AST_PROC,
     AST_PROC_CALL,
     AST_PROC_SIGNATURE,
@@ -22,12 +23,13 @@ inline const char *to_string(AstKind kind)
 {
     switch (kind)
     {
+        case AST_ARG:            return "AST_PARAM";
         case AST_BIN_OP:         return "AST_BIN_OP";
         case AST_BLOCK:          return "AST_BLOCK";
         case AST_DECL:           return "AST_DECL";
         case AST_IDENT:          return "AST_IDENT";
+        case AST_IF:             return "AST_F";
         case AST_LITERAL:        return "AST_LITERAL";
-        case AST_ARG:            return "AST_PARAM";
         case AST_PROC:           return "AST_PROC";
         case AST_PROC_CALL:      return "AST_PROC_CALL";
         case AST_PROC_SIGNATURE: return "AST_PROC_SIGNATURE";
@@ -49,8 +51,21 @@ struct AstNode
     AstKind kind{};
 };
 
+template<typename TNode>
+TNode *ast_cast(AstNode *node)
+{
+    if (node->kind != TNode::kind)
+    {
+        return nullptr;
+    }
+
+    return static_cast<TNode *>(node);
+}
+
 struct AstDecl : AstNode
 {
+    constexpr static AstKind kind = AST_DECL;
+
     AstDecl()
         : AstNode(AST_DECL)
     {
@@ -62,7 +77,7 @@ struct AstDecl : AstNode
     // Compiler information
 
     struct AstBlock *block{};
-    struct AstProc *proc{};
+    struct AstProc *proc{};  // TODO: Can read this from the context (current_proc)
     /* bool is_global{}; */
     int64_t address{};  // Global declaration: address inside the program
                         // Local declaration (procedure): offset from procedure stack base
@@ -73,6 +88,8 @@ struct AstDecl : AstNode
 
 struct AstBinOp : AstNode
 {
+    constexpr static AstKind kind = AST_BIN_OP;
+
     AstBinOp()
         : AstNode(AST_BIN_OP)
     {
@@ -80,11 +97,13 @@ struct AstBinOp : AstNode
 
     AstNode *lhs{};
     AstNode *rhs{};
-    TokenType binop{};
+    TokenType type{};
 };
 
 struct AstArg : AstNode
 {
+    constexpr static AstKind kind = AST_ARG;
+
     AstArg()
         : AstNode(AST_ARG)
     {
@@ -104,6 +123,8 @@ enum AstLiteralType
 
 struct AstLiteral : AstNode
 {
+    constexpr static AstKind kind = AST_LITERAL;
+
     AstLiteral()
         : AstNode(AST_LITERAL)
     {
@@ -116,6 +137,8 @@ struct AstLiteral : AstNode
 
 struct AstProcSignature : AstNode
 {
+    constexpr static AstKind kind = AST_PROC_SIGNATURE;
+
     AstProcSignature()
         : AstNode(AST_PROC_SIGNATURE)
     {
@@ -126,6 +149,8 @@ struct AstProcSignature : AstNode
 
 struct AstBlock : AstNode
 {
+    constexpr static AstKind kind = AST_BLOCK;
+
     AstBlock()
         : AstNode(AST_BLOCK)
     {
@@ -142,9 +167,23 @@ struct AstBlock : AstNode
     bool is_global() const { return this->parent_block == nullptr; }
 };
 
+struct AstIf : public AstNode
+{
+    constexpr static AstKind kind = AST_IF;
+
+    AstIf()
+        : AstNode(AST_IF)
+    {
+    }
+
+    AstNode *condition;
+    AstBlock body;
+};
 
 struct AstReturn : AstNode
 {
+    constexpr static AstKind kind = AST_RETURN;
+
     AstReturn()
         : AstNode(AST_RETURN)
     {
@@ -155,6 +194,8 @@ struct AstReturn : AstNode
 
 struct AstIdent : AstNode
 {
+    constexpr static AstKind kind = AST_IDENT;
+
     AstIdent()
         : AstNode(AST_IDENT)
     {
@@ -165,6 +206,8 @@ struct AstIdent : AstNode
 
 struct AstProc : AstNode
 {
+    constexpr static AstKind kind = AST_PROC;
+
     AstProc()
         : AstNode(AST_PROC)
     {
@@ -176,6 +219,8 @@ struct AstProc : AstNode
 
 struct AstProcCall : AstNode
 {
+    constexpr static AstKind kind = AST_PROC_CALL;
+
     AstProcCall()
         : AstNode(AST_PROC_CALL)
     {
@@ -187,6 +232,8 @@ struct AstProcCall : AstNode
 
 struct AstProgram : AstNode
 {
+    constexpr static AstKind kind = AST_PROGRAM;
+
     AstProgram()
         : AstNode(AST_PROGRAM)
     {

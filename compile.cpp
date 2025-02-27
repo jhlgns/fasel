@@ -7,15 +7,12 @@ AstDecl *find_decl(AstBlock *block, std::string_view name)
 {
     for (auto statement : block->statements)
     {
-        if (statement->kind != AST_DECL)
+        if (auto decl = ast_cast<AstDecl>(statement))
         {
-            continue;
-        }
-
-        auto decl = static_cast<AstDecl *>(statement);
-        if (text_of(&decl->ident) == name)
-        {
-            return decl;
+            if (text_of(&decl->ident) == name)
+            {
+                return decl;
+            }
         }
     }
 
@@ -29,19 +26,20 @@ AstDecl *find_decl(AstBlock *block, std::string_view name)
 
 // TODO: We have to differentiate if we want to include the node itself
 // if it is a block...
-std::vector<AstBlock *> get_child_blocks(AstNode *node)
+std::vector<AstBlock *> get_statement_child_blocks(AstNode *node)
 {
-    switch (node->kind)
+    if (auto block = ast_cast<AstBlock>(node))
     {
-        case AST_BLOCK:
-        {
-            auto block = static_cast<AstBlock *>(node);
-            return {block};
-        }
-
-        // TODO: Handle AST_IF, AST_WHILE etc. once they are implemented
-        default: return {};
+        return {block};
     }
+
+    if (auto if_ = ast_cast<AstIf>(node))
+    {
+        return {&if_->body};
+    }
+
+    // TODO: Handle AST_IF, AST_WHILE etc. once they are implemented
+    return {};
 }
 
 void allocate_locals(AstBlock *block)
@@ -51,23 +49,19 @@ void allocate_locals(AstBlock *block)
 
     for (auto statement : block->statements)
     {
-        if (statement->kind != AST_DECL)
+        if (auto decl = ast_cast<AstDecl>(statement))
         {
-            continue;
+            auto size_of_decl = 8;  // TODO
+            decl->address     = block->offset_from_parent_block + block->size;
+            block->size += size_of_decl;
         }
-
-        auto decl = static_cast<AstDecl *>(statement);
-
-        auto size_of_decl = 8;  // TODO
-        decl->address     = block->offset_from_parent_block + block->size;
-        block->size += size_of_decl;
     }
 
     // Calculate sizes of child blocks and get the largest child block size
     int64_t max_child_block_size = 0;
     for (auto statement : block->statements)
     {
-        auto child_blocks = get_child_blocks(statement);
+        auto child_blocks = get_statement_child_blocks(statement);
         for (auto child_block : child_blocks)
         {
             child_block->offset_from_parent_block = block->offset_from_parent_block + block->size;
@@ -86,7 +80,13 @@ void allocate_locals(AstBlock *block)
 
 void write(uint8_t *data, size_t len, BytecodeWriter *w)
 {
-    w->bytecode.insert(w->bytecode.end(), data, data + len);
+    if (w->pos + len > w->bytecode.size())
+    {
+        w->bytecode.resize(w->pos + len);
+    }
+
+    memcpy(&w->bytecode[w->pos], data, len);
+    w->pos += len;
 }
 
 void _write8(uint8_t value, BytecodeWriter *w)
@@ -167,200 +167,275 @@ bool is_expression(AstKind kind)
 
 [[nodiscard]] bool generate_code(AstNode *node, BytecodeWriter *w)
 {
-    switch (node->kind)
+    if (auto bin_op = ast_cast<AstBinOp>(node))
     {
-        case AST_BIN_OP:
+        if (bin_op->type == TOK_AND)
         {
-            auto binop = static_cast<AstBinOp *>(node);
-
-            if (generate_expr(binop->lhs, w) == false || generate_expr(binop->rhs, w) == false)
+            if (generate_expr(bin_op->lhs, w) == false)
             {
                 return false;
             }
 
-            switch (binop->binop)
-            {
-                case TOK_ASTERISK: write_op(MUL, w); break;
-                case TOK_SLASH:    write_op(DIV, w); break;
-                case TOK_MOD:      write_op(MOD, w); break;
-                case TOK_PLUS:     write_op(ADD, w); break;
-                case TOK_MINUS:    write_op(SUB, w); break;
-                default:           assert(false); break;
-            }
+            auto jmp0_false_pos_1 = w->pos;
+            write_op_64(JMP0, 333, w);
 
-            return true;
-        }
-
-        case AST_IDENT:
-        {
-            auto ident = static_cast<AstIdent *>(node);
-
-            auto decl = find_decl(w->current_block, text_of(&ident->ident));
-            if (decl == nullptr)
-            {
-                compile_error(w, std::format("Declaration of {} not found", text_of(&ident->ident)));
-                return false;
-            }
-
-            auto address_relative_to_rsp = decl->address - decl->proc->body.size;
-            write_op_64(LOADR, address_relative_to_rsp, w);
-            /* write64(decl->, w); */  // TODO
-
-            return true;
-        }
-
-        case AST_BLOCK:
-        {
-            auto block = static_cast<AstBlock *>(node);
-
-            auto prev_block  = w->current_block;
-            w->current_block = block;
-            defer
-            {
-                w->current_block = prev_block;
-            };
-
-            auto got_return = false;
-            for (auto statement : block->statements)
-            {
-                if (generate_code(statement, w) == false)
-                {
-                    return false;
-                }
-
-                if (got_return == false && statement->kind == AST_RETURN)
-                {
-                    got_return = true;
-                }
-            }
-
-            if (block->is_proc_body && got_return == false)
-            {
-                // Write implicit return - NOTE: will cause stack corruption
-                // for functions that are supposed to return a value but don't
-                write_op(RET, w);
-            }
-
-            return true;
-        }
-
-        case AST_DECL:
-        {
-            auto decl = static_cast<AstDecl *>(node);
-
-            assert(decl->proc == nullptr);
-            decl->proc = w->current_proc;
-
-            /* assert((decl->is_global == false) == (decl->address < 0)); */
-
-            if (w->current_block->is_global())
-            {
-                auto address = w->bytecode.size();
-                if (generate_code(decl->init_expr, w) == false)
-                {
-                    return false;
-                }
-
-                decl->address = address;
-            }
-            else
-            {
-                if (generate_expr(decl->init_expr, w) == false)
-                {
-                    return false;
-                }
-
-                auto address_relative_to_rsp = decl->address - decl->proc->body.size;
-                write_op_64(STORER, address_relative_to_rsp, w);
-            }
-
-            return true;
-        }
-
-        case AST_LITERAL:
-        {
-            auto literal = static_cast<AstLiteral *>(node);
-
-            assert(literal->type == LIT_INT);  // TODO
-            write_op_64(PUSHC, literal->int_value, w);
-
-            return true;
-        }
-
-        case AST_ARG:
-        {
-            assert(false);
-        }
-
-        case AST_PROC:
-        {
-            auto proc = static_cast<AstProc *>(node);
-
-            auto prev_proc  = w->current_proc;
-            w->current_proc = proc;
-            defer
-            {
-                w->current_proc = prev_proc;
-            };
-
-            allocate_locals(&proc->body);
-
-            // Make stack space for the locals
-            write_op_64(ADDRSP, proc->body.size, w);
-
-            return generate_code(&proc->body, w);
-        }
-
-        case AST_PROC_CALL:
-        {
-            assert(false);
-        }
-
-        case AST_PROC_SIGNATURE:
-        {
-            assert(false);
-        }
-
-        case AST_PROGRAM:
-        {
-            auto program = static_cast<AstProgram *>(node);
-
-            for (auto node : program->block.statements)
-            {
-                if (node->kind != AST_DECL)
-                {
-                    compile_error(w, "Expected declaration");
-                    return false;
-                }
-
-                return generate_code(&program->block, w);
-            }
-
-            return true;
-        }
-
-        case AST_RETURN:
-        {
-            auto ret = static_cast<AstReturn *>(node);
-
-            if (generate_expr(ret->expr, w) == false)
+            if (generate_expr(bin_op->rhs, w) == false)
             {
                 return false;
             }
 
-            if (w->current_block->size != 0)
-            {
-                // Deallocate the locals stack space
-                write_op_64(ADDRSP, -w->current_block->size, w);
-            }
+            auto jmp0_false_pos_2 = w->pos;
+            write_op_64(JMP0, 333, w);
 
-            write_op(RET, w);
+            write_op_64(PUSHC, 1, w);
+            auto jmp_done_pos = w->pos;
+            write_op_64(JMP, 333, w);
+
+            auto false_label = w->pos;
+            write_op_64(PUSHC, 0, w);
+            auto done_label = w->pos;
+
+            w->pos = jmp0_false_pos_1;
+            write_op_64(JMP0, false_label, w);
+            w->pos = jmp0_false_pos_2;
+            write_op_64(JMP0, false_label, w);
+            w->pos = jmp_done_pos;
+            write_op_64(JMP, done_label, w);
+
+            w->pos = done_label;
 
             return true;
         }
 
-        default: assert(false);
+        if (bin_op->type == TOK_OR)
+        {
+            if (generate_expr(bin_op->lhs, w) == false)
+            {
+                return false;
+            }
+
+            auto jmp1_true_pos_1 = w->pos;
+            write_op_64(JMP1, 333, w);
+
+            if (generate_expr(bin_op->rhs, w) == false)
+            {
+                return false;
+            }
+
+            auto jmp1_true_pos_2 = w->pos;
+            write_op_64(JMP1, 333, w);
+
+            write_op_64(PUSHC, 0, w);
+            auto jmp_done_pos = w->pos;
+            write_op_64(JMP, 333, w);
+
+            auto true_label = w->pos;
+            write_op_64(PUSHC, 1, w);
+            auto done_label = w->pos;
+
+            w->pos = jmp1_true_pos_1;
+            write_op_64(JMP1, true_label, w);
+            w->pos = jmp1_true_pos_2;
+            write_op_64(JMP1, true_label, w);
+            w->pos = jmp_done_pos;
+            write_op_64(JMP, done_label, w);
+
+            w->pos = done_label;
+
+            return true;
+        }
+
+        if (generate_expr(bin_op->lhs, w) == false || generate_expr(bin_op->rhs, w) == false)
+        {
+            return false;
+        }
+
+        switch (bin_op->type)
+        {
+            case TOK_ASTERISK: write_op(MUL, w); break;
+            case TOK_SLASH:    write_op(DIV, w); break;
+            case TOK_MOD:      write_op(MOD, w); break;
+            case TOK_PLUS:     write_op(ADD, w); break;
+            case TOK_MINUS:    write_op(SUB, w); break;
+
+            case TOK_BIT_AND: write_op(BITAND, w); break;
+            case TOK_BIT_OR:  write_op(BITOR, w); break;
+            case TOK_BIT_XOR: write_op(BITXOR, w); break;
+
+            case TOK_LEFTSHIFT:  write_op(LSH, w); break;
+            case TOK_RIGHTSHIFT: write_op(RSH, w); break;
+            case TOK_EQ:         write_op(CMPEQ, w); break;
+            case TOK_NE:         write_op(CMPNE, w); break;
+            case TOK_GE:         write_op(CMPGE, w); break;
+            case TOK_GT:         write_op(CMPGT, w); break;
+            case TOK_LE:         write_op(CMPLE, w); break;
+            case TOK_LT:         write_op(CMPLT, w); break;
+
+            default: assert(false); break;
+        }
+
+        return true;
     }
 
+    if (auto ident = ast_cast<AstIdent>(node))
+    {
+        auto decl = find_decl(w->current_block, text_of(&ident->ident));
+        if (decl == nullptr)
+        {
+            compile_error(w, std::format("Declaration of {} not found", text_of(&ident->ident)));
+            return false;
+        }
+
+        auto relative_address = decl->address - decl->proc->body.size;
+        write_op_64(LOADR, relative_address, w);
+
+        return true;
+    }
+
+    if (auto block = ast_cast<AstBlock>(node))
+    {
+        auto prev_block  = w->current_block;
+        w->current_block = block;
+        defer
+        {
+            w->current_block = prev_block;
+        };
+
+        auto got_return = false;
+        for (auto statement : block->statements)
+        {
+            if (generate_code(statement, w) == false)
+            {
+                return false;
+            }
+
+            if (got_return == false && statement->kind == AST_RETURN)
+            {
+                got_return = true;
+            }
+        }
+
+        if (block->is_proc_body && got_return == false)
+        {
+            // Write implicit return - NOTE: will cause stack corruption
+            // for functions that are supposed to return a value but don't
+            write_op(RET, w);
+        }
+
+        return true;
+    }
+
+    if (auto decl = ast_cast<AstDecl>(node))
+    {
+        assert(decl->proc == nullptr);
+        decl->proc = w->current_proc;
+
+        if (w->current_block->is_global())
+        {
+            auto address = w->bytecode.size();
+            if (generate_code(decl->init_expr, w) == false)
+            {
+                return false;
+            }
+
+            decl->address = address;
+        }
+        else
+        {
+            if (generate_expr(decl->init_expr, w) == false)
+            {
+                return false;
+            }
+
+            auto relative_address = decl->address - decl->proc->body.size;
+            write_op_64(STORER, relative_address, w);
+        }
+
+        return true;
+    }
+
+    if (auto literal = ast_cast<AstLiteral>(node))
+    {
+        assert(literal->type == LIT_INT);  // TODO
+        write_op_64(PUSHC, literal->int_value, w);
+        return true;
+    }
+
+    if (auto proc = ast_cast<AstProc>(node))
+    {
+        auto prev_proc  = w->current_proc;
+        w->current_proc = proc;
+        defer
+        {
+            w->current_proc = prev_proc;
+        };
+
+        allocate_locals(&proc->body);
+
+            // Make stack space for the locals
+        write_op_64(ADDRSP, proc->body.size, w);
+
+        return generate_code(&proc->body, w);
+    }
+
+    if (auto program = ast_cast<AstProgram>(node))
+    {
+        for (auto node : program->block.statements)
+        {
+            if (node->kind != AST_DECL)
+            {
+                compile_error(w, "Expected declaration");
+                return false;
+            }
+
+            return generate_code(&program->block, w);
+        }
+
+        return true;
+    }
+
+    if (auto if_ = ast_cast<AstIf>(node))
+    {
+        if (generate_expr(if_->condition, w) == false)
+        {
+            return false;
+        }
+
+        auto jmp0_false_pos = w->pos;
+        write_op_64(JMP0, 333, w);
+
+        if (generate_code(&if_->body, w) == false)
+        {
+            return false;
+        }
+
+        auto false_label = w->pos;
+        w->pos           = jmp0_false_pos;
+        write_op_64(JMP0, false_label, w);
+
+        w->pos = false_label;
+
+        return true;
+    }
+
+    if (auto ret = ast_cast<AstReturn>(node))
+    {
+        if (generate_expr(ret->expr, w) == false)
+        {
+            return false;
+        }
+
+        if (w->current_block->size != 0)
+        {
+                // Deallocate the locals stack space
+            write_op_64(ADDRSP, -w->current_block->size, w);
+        }
+
+        write_op(RET, w);
+
+        return true;
+    }
+
+    assert(false);
     return false;
 }

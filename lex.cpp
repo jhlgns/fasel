@@ -77,12 +77,48 @@ Token next_token(Lexer *l)
 
     l->start = l->at;
 
-    const char *keywords[] = {"return", "proc", "if", "else", "while"};
-    for (auto kw : keywords)
+    // clang-format off
+    auto simple_tokens = {
+        std::make_tuple("return", TOK_KEYWORD),
+        std::make_tuple("while", TOK_KEYWORD),
+        std::make_tuple("proc", TOK_KEYWORD),
+        std::make_tuple("else", TOK_KEYWORD),
+        std::make_tuple("if", TOK_KEYWORD),
+
+        std::make_tuple(":=", TOK_DECLASSIGN),
+        std::make_tuple("<<", TOK_LEFTSHIFT),
+        std::make_tuple(">>", TOK_RIGHTSHIFT),
+        std::make_tuple("&&", TOK_AND),
+        std::make_tuple("||", TOK_OR),
+        std::make_tuple("==", TOK_EQ),
+        std::make_tuple("!=", TOK_NE),
+        std::make_tuple(">=", TOK_GE),
+        std::make_tuple("<=", TOK_LE),
+
+        std::make_tuple("*", TOK_ASTERISK),
+        std::make_tuple("/", TOK_SLASH),
+        std::make_tuple("%", TOK_MOD),
+        std::make_tuple("+", TOK_PLUS),
+        std::make_tuple("-", TOK_MINUS),
+        std::make_tuple("=", TOK_ASSIGN),
+        std::make_tuple("&", TOK_BIT_AND),
+        std::make_tuple("^", TOK_BIT_XOR),
+        std::make_tuple("|", TOK_BIT_OR),
+        std::make_tuple(",", TOK_COMMA),
+        std::make_tuple("(", TOK_OPENPAREN),
+        std::make_tuple(")", TOK_CLOSEPAREN),
+        std::make_tuple("{", TOK_OPENBRACE),
+        std::make_tuple("}", TOK_CLOSEBRACE),
+        std::make_tuple(">", TOK_GT),
+        std::make_tuple("<", TOK_LT),
+    };
+    // clang-format on
+
+    for (auto [text, type] : simple_tokens)
     {
-        if (eat_seq(l, kw))
+        if (eat_seq(l, text))
         {
-            return emit(l, TOK_KEYWORD);
+            return emit(l, type);
         }
     }
 
@@ -102,32 +138,12 @@ Token next_token(Lexer *l)
         return emit(l, TOK_NUM_LIT);
     }
 
-    if (eat_seq(l, ":="))
-    {
-        return emit(l, TOK_DECLASSIGN);
-    }
-
-    char single_char_tokens[] = {'*', '/', '%', '+', '-', ',', '(', ')', '{', '}', '='};
-    for (int i = 0; i < sizeof(single_char_tokens); ++i)
-    {
-        if (*l->at.c == single_char_tokens[i])
-        {
-            next(&l->at);
-            return emit(l, static_cast<TokenType>(single_char_tokens[i]));
-        }
-    }
-
     if (*l->at.c == '\0')
     {
         return emit(l, TOK_EOF);
     }
 
     printf("Lexer error at %d:%d: unable to parse token.\n", l->at.line, l->at.line_offset);
-    /* for (auto c = l->at.c; *c && (c - l->at.c) < 5; ++c) */
-    /* { */
-    /*     printf("%c", *c); */
-    /* } */
-    /* printf("...\n"); */
     next(&l->at);
 
     return emit(l, TOK_EOF);

@@ -5,6 +5,12 @@
 #include <format>
 #include <iostream>
 
+/*
+TODO: Error reporting: at a certain point, we know that a syntax error happened without relying on the parent parse context handling it.
+For example, if we parse the keyword 'proc', then we know we must parse a procedure.
+The parent context might discard the error message and set its own onw...
+*/
+
 struct Parser
 {
     Lexer lexer;
@@ -38,13 +44,10 @@ Parser add_error(Parser bak, std::string_view error)
     }
 
     auto line_end = next.pos.c;
-    while (*(line_end + 1) != '\n' && line_end + 1 < bak.lexer.source.data())
+    while (*line_end != '\n' && line_end + 1 < bak.lexer.source.data() + bak.lexer.source.size())
     {
         ++line_end;
     }
-
-    /* auto line = static_cast<char *>(arena_alloc(line_end - line_start + 1)); */
-    /* strcpy(line, line_start); */
 
     auto line = std::string_view{line_start, line_end};
     assert(line.find("\n") == std::string_view::npos);
@@ -68,16 +71,6 @@ Parser eat_token(Parser p, TokenType type, Token *token)
     }
 
     return p;
-}
-
-Parser eat_token(Parser p, char type, Token *token)
-{
-    return eat_token(p, static_cast<TokenType>(type), token);
-}
-
-Parser eat_token(Parser p, char type)
-{
-    return eat_token(p, static_cast<TokenType>(type), nullptr);
 }
 
 Parser eat_token(Parser p, TokenType type)
@@ -152,6 +145,25 @@ Parser parse_statement(Parser p, AstNode **out_statement)
         return p;
     }
 
+    if (maybe(&p, eat_keyword(p, "if")))
+    {
+        AstIf if_;
+        if (must(&p, parse_expr(p, &if_.condition)) == false)
+        {
+            return copy_error(bak, p.error);
+        }
+
+        if (must(&p, parse_block(p, &if_.body)) == false)
+        {
+            return copy_error(bak, p.error);
+        }
+
+        auto result    = new AstIf{};
+        *result        = std::move(if_);
+        *out_statement = result;
+        return p;
+    }
+
     if (maybe(&p, eat_keyword(p, "return")))
     {
         AstReturn ret{};
@@ -192,14 +204,14 @@ Parser parse_block(Parser p, AstBlock *out_block)
         p.current_block = out_block->parent_block;
     };
 
-    if (must(&p, eat_token(p, '{')) == false)
+    if (must(&p, eat_token(p, TOK_OPENBRACE)) == false)
     {
         return copy_error(bak, p.error);
     }
 
     while (true)
     {
-        if (maybe(&p, eat_token(p, '}')))
+        if (maybe(&p, eat_token(p, TOK_CLOSEBRACE)))
         {
             return p;
         }
@@ -224,7 +236,7 @@ Parser parse_proc(Parser p, AstProc *out_proc)
     {
         return copy_error(bak, p.error);
     }
-    if (must(&p, eat_token(p, '(')) == false)
+    if (must(&p, eat_token(p, TOK_OPENPAREN)) == false)
     {
         return copy_error(bak, p.error);
     }
@@ -235,8 +247,8 @@ Parser parse_proc(Parser p, AstProc *out_proc)
         auto bak  = p;
         switch (next_token(&p).type)
         {
-            case ',': break;  // TODO: Allows for ',' at beginning of parameter list
-            case ')': done = 1; break;
+            case TOK_COMMA: break;  // TODO: Allows for ',' at beginning of parameter list
+            case TOK_CLOSEPAREN: done = 1; break;
             default:  p = bak; break;
         }
 
@@ -316,7 +328,7 @@ Parser parse_suffix_expr(Parser p, AstNode *lhs, AstNode **node)
 {
     auto bak = p;
 
-    if (maybe(&p, eat_token(p, '(')))
+    if (maybe(&p, eat_token(p, TOK_OPENPAREN)))
     {
         AstProcCall call{};
         call.proc = lhs;
@@ -324,7 +336,7 @@ Parser parse_suffix_expr(Parser p, AstNode *lhs, AstNode **node)
         auto is_end = false;
         while (true)
         {
-            if (advance(&p, eat_token(p, ')'), is_end))
+            if (advance(&p, eat_token(p, TOK_CLOSEPAREN), is_end))
             {
                 break;
             }
@@ -341,7 +353,7 @@ Parser parse_suffix_expr(Parser p, AstNode *lhs, AstNode **node)
 
             call.arguments.push_back(argument);
 
-            if (maybe(&p, eat_token(p, ',')) == false)
+            if (maybe(&p, eat_token(p, TOK_COMMA)) == false)
             {
                 is_end = true;
             }
@@ -385,7 +397,7 @@ Parser parse_binary_expr(Parser p, AstNode **node, int prev_prec)
         }
 
         auto bin_op   = new AstBinOp{};
-        bin_op->binop = op.type;
+        bin_op->type = op.type;
         bin_op->lhs   = lhs;
         bin_op->rhs   = rhs;
 

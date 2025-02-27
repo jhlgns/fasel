@@ -21,7 +21,7 @@
             "program": "${workspaceFolder}/build/tests",
             //"args": ["Basic locals"],
             //"args": ["Implicit return"],
-            "args": ["Nested blocks 2"],
+            "args": ["if 1"],
             "cwd": "${workspaceFolder}/build"
         }
     ]

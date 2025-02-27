@@ -13,7 +13,7 @@ std::string to_string(int indent_level, AstBinOp *node)
     std::string result;
 
     result += indent(indent_level, "BinOp(\n");
-    result += std::format("{}\n", indent(indent_level + 1, std::string{(char)node->binop}));
+    result += std::format("{}\n", indent(indent_level + 1, std::string{(char)node->type}));
     result += std::format("{}\n", dump_node(indent_level + 1, node->lhs));
     result += std::format("{}\n", dump_node(indent_level + 1, node->rhs));
     result += indent(indent_level, ")");

@@ -194,67 +194,6 @@ void run_program(std::span<uint8_t> program)
                 break;
             }
 
-            case CMP:
-            {
-                assert(false);
-                break;
-            }
-
-            case JMP:
-            {
-                assert(false);
-                break;
-            }
-
-            case JEQ:
-            {
-                assert(false);
-                break;
-            }
-
-            case JNE:
-            {
-                assert(false);
-                break;
-            }
-
-            case JLT:
-            {
-                assert(false);
-                break;
-            }
-
-            case JLE:
-            {
-                assert(false);
-                break;
-            }
-
-            case JGT:
-            {
-                assert(false);
-                break;
-            }
-
-            case JGE:
-            {
-                assert(false);
-                break;
-            }
-
-            case CALL:
-            {
-                assert(false);
-                break;
-            }
-
-            case RET:
-            {
-                // TODO
-                // assert(false);
-                break;
-            }
-
             default: assert(false);
         }
     }

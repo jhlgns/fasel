@@ -229,3 +229,47 @@ main := proc() {
 
     test_codegen(source, &mock);
 }
+
+TEST_CASE("if 1")
+{
+    auto source = std::string_view{
+        R"(
+main := proc() {
+    a := 1
+
+    if a == 1 {
+        b := 2
+    }
+}
+)"};
+
+    // TODO: For allocation tests, don't make this an integration test - create a helper function that takes an array of
+    // identifier-address pairs and checks if they match based on the resulting AST
+
+    auto total = 16;
+    auto a     = 0 - total;
+    auto b     = 8 - total;
+
+    auto mock = make_mock_writer();
+
+    write_op_64(ADDRSP, total, &mock);
+    write_op_64(PUSHC, 1, &mock);
+    write_op_64(STORER, a, &mock);
+    write_op_64(LOADR, a, &mock);
+    write_op_64(PUSHC, 1, &mock);
+    write_op(CMPEQ, &mock);
+    auto jmp0_false_pos = mock.pos;
+    write_op_64(JMP0, 333, &mock);
+    write_op_64(PUSHC, 2, &mock);
+    write_op_64(STORER, b, &mock);
+    auto false_label = mock.pos;
+
+    mock.pos = jmp0_false_pos;
+    write_op_64(JMP0, false_label, &mock);
+
+    mock.pos = false_label;
+    write_op(RET, &mock);
+
+    test_codegen(source, &mock);
+}
+
