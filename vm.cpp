@@ -1,74 +1,70 @@
 #include "vm.h"
 #include "op_code.h"
+#include "parse.h"
+#include <format>
+#include <iostream>
 
-struct Vm
+void fatal_error(std::string_view message)
 {
-    std::span<uint8_t> program;
-    std::vector<uint8_t> stack;
-    std::vector<uint8_t> memory;
-    int64_t rsp;
-    int64_t rip;
-};
+    printf("Fatal VM error: %s\n", message.data());
+    abort();
+}
 
-void read(Vm *vm, void *data, size_t len)
+void read_program(Vm *vm, void *data, size_t len)
 {
-    if (vm->rip + len > vm->program.size())
+    if (vm->rip < Vm::program_start || vm->rip + len > vm->program_end())
     {
-        printf("Read outside of program bounds\n");
-        assert(false);
+        fatal_error("Read outside of program bounds");
     }
 
-    memcpy(data, &vm->program[vm->rip], len);
+    memcpy(data, &vm->memory[vm->rip], len);
     vm->rip += len;
 }
 
 OpCode read_op(Vm *vm)
 {
     OpCode result;
-    read(vm, &result, sizeof(result));
+    read_program(vm, &result, sizeof(result));
 
     return result;
 }
 
-int64_t read_64(Vm *vm)
+int64_t read_arg_64(Vm *vm)
 {
     int64_t result;
-    read(vm, &result, sizeof(result));
+    read_program(vm, &result, sizeof(result));
 
     return result;
 }
 
-void write_stack(Vm *vm, int64_t address, const void *data, size_t len)
+void write_memory(Vm *vm, int64_t address, const void *data, size_t len)
 {
-    if (address + len > vm->rsp)
+    if (address < vm->stack_start() || address + len > vm->stack_end())
     {
-        printf("Segfault\n");
-        assert(false);
+        fatal_error("Segfault");
     }
 
-    memcpy(&vm->stack[vm->rsp], data, len);
+    memcpy(&vm->memory[address], data, len);
 }
 
-void read_stack(Vm *vm, int64_t address, void *data, size_t len)
+void read_memory(Vm *vm, int64_t address, void *data, size_t len)
 {
-    if (address + len > vm->rsp)
+    if (address < vm->program_start || address + len > vm->program_end())
     {
-        printf("Segfault\n");
-        assert(false);
+        fatal_error("Segfault");
     }
 
-    memcpy(data, &vm->stack[vm->rsp], len);
+    memcpy(data, &vm->memory[address], len);
 }
 
 void push(Vm *vm, const void *data, size_t len)
 {
-    if (vm->rsp + len > vm->stack.size())
+    if (vm->rsp + len > vm->stack_end())
     {
-        printf("Stack overflow\n");
-        assert(false);
+        fatal_error("Stack overflow");
     }
 
-    memcpy(&vm->stack[vm->rsp], data, len);
+    memcpy(&vm->memory[vm->rsp], data, len);
     vm->rsp += len;
 }
 
@@ -79,14 +75,13 @@ void push_64(Vm *vm, int64_t value)
 
 void pop(Vm *vm, void *data, size_t len)
 {
-    if (vm->rsp < len)
+    if (vm->rsp < len || vm->rsp - len < vm->stack_start())
     {
-        printf("Stack underflow\n");
-        assert(false);
+        fatal_error("Stack underflow");
     }
 
     vm->rsp -= len;
-    memcpy(data, &vm->stack[vm->rsp], len);
+    memcpy(data, &vm->memory[vm->rsp], len);
 }
 
 int64_t pop_64(Vm *vm)
@@ -97,112 +92,192 @@ int64_t pop_64(Vm *vm)
     return result;
 }
 
-void run_program(std::span<uint8_t> program)
+void load_program(Vm *vm, std::span<uint8_t> bytecode)
 {
-    Vm vm{.program = program};
-    vm.stack.resize(64 * 1024);
-    // TODO: Stack and main memory could be one array like in a real address space, using a memory break
-    vm.memory.resize(64 * 1024);
+    vm->program_length = bytecode.size();
+    vm->rip            = Vm::program_start;
+    vm->rsp            = vm->stack_start();
+    vm->memory.resize(Vm::program_start + bytecode.size() + Vm::stack_size);  // TODO: Alignment of stack start?
+    memcpy(&vm->memory[Vm::program_start], bytecode.data(), bytecode.size());
+}
 
-    while (vm.rip != vm.program.size())
+void start_call_proc(Vm *vm, struct AstProgram *program, std::string_view proc_name)
+{
+    auto proc_decl = program->block.find_decl(proc_name);
+    if (proc_decl == nullptr)
     {
-        switch (read_op(&vm))
+        fatal_error(std::format("Proc '{}' not found", proc_name));
+    }
+
+    start_call_proc(vm, proc_decl->address);
+}
+
+void start_call_proc(Vm *vm, int64_t address)
+{
+    push_64(vm, vm->program_length);  // NOTE: The return address
+    vm->rip = Vm::program_start + address;
+}
+
+void run_program(Vm *vm)
+{
+    while (vm->rip < vm->program_end())
+    {
+        auto op = read_op(vm);
+        switch (op)
         {
             case PUSHC:
             {
-                auto constant = read_64(&vm);
-                push_64(&vm, constant);
+                auto constant = read_arg_64(vm);
+                push_64(vm, constant);
 
                 break;
             }
 
             case LOADR:
             {
-                auto offset = read_64(&vm);
+                auto offset = read_arg_64(vm);
                 int64_t value;
-                read_stack(&vm, vm.rsp + offset, &value, sizeof(value));
-                push_64(&vm, value);
+                read_memory(vm, vm->rsp + offset, &value, sizeof(value));
+                push_64(vm, value);
 
-                break;
-            }
-
-            case LOAD:
-            {
                 break;
             }
 
             case STORER:
             {
-                auto offset = read_64(&vm);
-                auto value  = pop_64(&vm);
-                write_stack(&vm, vm.rsp + offset, &value, sizeof(value));
+                auto offset = read_arg_64(vm);
+                auto value  = pop_64(vm);
+                write_memory(vm, vm->rsp + offset, &value, sizeof(value));
 
                 break;
             }
 
             case ADDRSP:
             {
-                auto offset = read_64(&vm);
+                auto offset = read_arg_64(vm);
+                vm->rsp += offset;
 
-            // TODO: Validate bounds!
-                vm.rsp += offset;
                 break;
             }
 
-            case ADD:
+            case JMP:
             {
-                auto a = pop_64(&vm);
-                auto b = pop_64(&vm);
-                push_64(&vm, a + b);
+                auto target = read_arg_64(vm);
+                vm->rip     = Vm::program_start + target;
 
                 break;
             }
 
-            case SUB:
+            case JMP0:
             {
-                auto a = pop_64(&vm);
-                auto b = pop_64(&vm);
-                push_64(&vm, a - b);
+                auto target    = read_arg_64(vm);
+                auto condition = pop_64(vm);
+
+                if (condition == 0)
+                {
+                    vm->rip = Vm::program_start + target;
+                }
 
                 break;
             }
 
-            case MUL:
+            case JMP1:
             {
-                auto a = pop_64(&vm);
-                auto b = pop_64(&vm);
-                push_64(&vm, a * b);
+                auto target    = read_arg_64(vm);
+                auto condition = pop_64(vm);
+
+                if (condition != 0)
+                {
+                    vm->rip = Vm::program_start + target;
+                }
 
                 break;
             }
 
-            case DIV:
+            case CALL:
             {
-                auto a = pop_64(&vm);
-                auto b = pop_64(&vm);
-                push_64(&vm, a / b);
+                auto target = pop_64(vm);
+                push_64(vm, vm->rip - Vm::program_start);
+                vm->rip = Vm::program_start + target;
 
                 break;
             }
 
-            case MOD:
+            case RET:
             {
-                auto a = pop_64(&vm);
-                auto b = pop_64(&vm);
-                push_64(&vm, a % b);
+                auto return_value = pop_64(vm);
+                auto return_addr  = pop_64(vm);
+                push_64(vm, return_value);
+                vm->rip = Vm::program_start + return_addr;
 
                 break;
             }
 
-            default: assert(false);
+#define BINOP_CASE(op_code, op) \
+    case op_code:               \
+    {                           \
+        auto b = pop_64(vm);    \
+        auto a = pop_64(vm);    \
+        push_64(vm, a op b);    \
+        break;                  \
+    }
+                BINOP_CASE(ADD, +)
+                BINOP_CASE(SUB, -)
+                BINOP_CASE(MUL, *)
+                BINOP_CASE(DIV, /)
+                BINOP_CASE(MOD, %)
+                BINOP_CASE(BITAND, &)
+                BINOP_CASE(BITOR, |)
+                BINOP_CASE(BITXOR, ^)
+                BINOP_CASE(RSH, >>)
+                BINOP_CASE(LSH, <<)
+                BINOP_CASE(CMPEQ, ==)
+                BINOP_CASE(CMPNE, !=)
+                BINOP_CASE(CMPGE, >=)
+                BINOP_CASE(CMPGT, >)
+                BINOP_CASE(CMPLE, <=)
+                BINOP_CASE(CMPLT, <)
+#undef BINOP_CASE
+
+            default: fatal_error("Unimplemented instruction");
         }
     }
 
-    printf("Program ran to last instruction\n");
-
-    for (auto i = 0; i < vm.rsp / 8; ++i)
+    if (vm->rip != vm->program_end())
     {
-        auto test = *(int64_t *)&vm.stack[i * 8];
-        printf("Stack value %d: %ld\n", i, test);
+        fatal_error("Decoding error: RIP is not at the end of the program");
     }
+
+    // printf("Program ran to last instruction\n");
+
+    // TODO
+    // for (auto i = 0; i < vm.rsp / 8; ++i)
+    // {
+    //     auto test = *(int64_t *)vm.stack[i * 8];
+    //     printf("Stack value %d: %ld\n", i, test);
+    // }
+}
+
+void run_main(Vm *vm, AstProgram *program, std::span<uint8_t> bytecode)
+{
+    load_program(vm, bytecode);
+    start_call_proc(vm, program, "main");
+    run_program(vm);
+}
+
+std::vector<int64_t> DEBUG_dump_stack(Vm *vm)
+{
+    auto count = vm->rsp - vm->stack_start();
+    assert(count % 8 == 0);
+    count /= 8;
+
+    std::vector<int64_t> result;
+    result.resize(count);
+
+    for (auto i = 0; i < count; ++i)
+    {
+        memcpy(&result[i], &vm->memory[vm->stack_start() + i * 8], 8);
+    }
+
+    return result;
 }

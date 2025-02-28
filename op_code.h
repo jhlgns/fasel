@@ -66,11 +66,11 @@ PUSHC 0
 enum OpCode : uint8_t
 {
     // Memory operations
-    PUSHC,  // value = read i64; push i64 value;
-    LOADR,  // offs = read i64; push i64 *(RSP + offs);
-    LOAD,   // addr = read i64; push i64 *addr;
-    STORER,  // offs = read i64; value = pop i64; *(RSP + offs) = value;
-    ADDRSP,  // offs = read i64; RSP += offs
+    PUSHC,    // value = read i64; push i64 value;
+    LOADR,    // offs = read i64; push i64 *(RSP + offs);
+    LOAD,     // addr = read i64; push i64 *addr;
+    STORER,   // offs = read i64; value = pop i64; *(RSP + offs) = value;
+    ADDRSP,   // offs = read i64; RSP += offs
 
     // Integer arithmetic operations
     ADD,  // a = pop i64; b = pop i64; push i64 a + b
@@ -96,6 +96,7 @@ enum OpCode : uint8_t
     JMP0,   // dst = read i64; a = pop i64; if a == 0 jmp dst;
     JMP1,   // dst = read i64; a = pop i64; if a != 0 jmp dst;
     JMP,    // dst = read i64; jmp dst;
+    CALL,
     RET,    // value = pop i64; ret = pop i64; push i64 value; jmp ret;
 };
 
@@ -127,6 +128,7 @@ inline const char *to_string(OpCode op)
         case JMP0:   return "JMP0";
         case JMP1:   return "JMP1";
         case JMP:    return "JMP";
+        case CALL:   return "CALL";
         case RET:    return "RET";
     }
 

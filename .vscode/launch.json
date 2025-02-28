@@ -19,9 +19,7 @@
             "preLaunchTask": "build",
             "name": "Debug tests",
             "program": "${workspaceFolder}/build/tests",
-            //"args": ["Basic locals"],
-            //"args": ["Implicit return"],
-            "args": ["if 1"],
+            // "args": ["Procedure calling"],
             "cwd": "${workspaceFolder}/build"
         }
     ]

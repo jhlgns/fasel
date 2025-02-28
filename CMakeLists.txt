@@ -34,6 +34,13 @@ target_compile_features(jang PUBLIC cxx_std_20)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/Catch2)
 # find_package(Catch2 3 REQUIRED)
 
-add_executable(tests compile_test.cpp ${shared_source_files})
+add_executable(
+    tests
+    compile_test.cpp
+    integration_tests.cpp
+    lex_test.cpp
+    parse_test.cpp
+    vm_test.cpp
+    ${shared_source_files})
 target_include_directories(tests PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(tests PUBLIC Catch2::Catch2WithMain)

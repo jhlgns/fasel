@@ -66,10 +66,15 @@ bool is_digit(char c)
     return c >= '0' && c <= '9';
 }
 
+bool is_hex_digit(char c)
+{
+    return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F';
+}
+
 Token next_token(Lexer *l)
 {
-  // TODO: Comments
-  // TODO: Floating point literals
+    // TODO: Comments
+    // TODO: Floating point literals
 
     for (; is_white(*l->at.c); next(&l->at))
     {
@@ -130,8 +135,17 @@ Token next_token(Lexer *l)
         return emit(l, TOK_IDENT);
     }
 
-    for (; is_digit(*l->at.c); next(&l->at))
+    if (is_digit(*l->at.c))
     {
+        next(&l->at);
+        if (*l->at.c == 'x')
+        {
+            next(&l->at);
+        }
+
+        for (; is_hex_digit(*l->at.c); next(&l->at))
+        {
+        }
     }
     if (l->at.c > l->start.c)
     {

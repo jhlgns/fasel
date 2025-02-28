@@ -23,7 +23,7 @@ inline const char *to_string(AstKind kind)
 {
     switch (kind)
     {
-        case AST_ARG:            return "AST_PARAM";
+        case AST_ARG:            return "AST_ARG";
         case AST_BIN_OP:         return "AST_BIN_OP";
         case AST_BLOCK:          return "AST_BLOCK";
         case AST_DECL:           return "AST_DECL";
@@ -42,7 +42,8 @@ inline const char *to_string(AstKind kind)
 
 struct AstNode
 {
-    AstNode() = delete;
+    AstNode()          = delete;
+    virtual ~AstNode() = default;
     explicit AstNode(AstKind kind)
         : kind{kind}
     {
@@ -54,6 +55,11 @@ struct AstNode
 template<typename TNode>
 TNode *ast_cast(AstNode *node)
 {
+    if (node == nullptr)
+    {
+        return nullptr;
+    }
+
     if (node->kind != TNode::kind)
     {
         return nullptr;
@@ -77,13 +83,9 @@ struct AstDecl : AstNode
     // Compiler information
 
     struct AstBlock *block{};
-    struct AstProc *proc{};  // TODO: Can read this from the context (current_proc)
-    /* bool is_global{}; */
+    struct AstProc *enclosing_proc{};
     int64_t address{};  // Global declaration: address inside the program
                         // Local declaration (procedure): offset from procedure stack base
-    /* int64_t root_block_size{};  // Local declaration: the size of the block that has the memory this declaration
-     * lives in (in case of */
-    /*                             // procedures, this is the procedure body), 0 for global declarations */
 };
 
 struct AstBinOp : AstNode
@@ -121,7 +123,7 @@ enum AstLiteralType
     LIT_STRING,
 };
 
-struct AstLiteral : AstNode
+struct AstLiteral : public AstNode
 {
     constexpr static AstKind kind = AST_LITERAL;
 
@@ -135,7 +137,7 @@ struct AstLiteral : AstNode
     int64_t int_value{};
 };
 
-struct AstProcSignature : AstNode
+struct AstProcSignature : public AstNode
 {
     constexpr static AstKind kind = AST_PROC_SIGNATURE;
 
@@ -147,7 +149,7 @@ struct AstProcSignature : AstNode
     std::vector<AstArg> arguments{};
 };
 
-struct AstBlock : AstNode
+struct AstBlock : public AstNode
 {
     constexpr static AstKind kind = AST_BLOCK;
 
@@ -165,6 +167,27 @@ struct AstBlock : AstNode
     int64_t size{};
 
     bool is_global() const { return this->parent_block == nullptr; }
+
+    AstDecl *find_decl(std::string_view name)
+    {
+        for (auto statement : this->statements)
+        {
+            if (auto decl = ast_cast<AstDecl>(statement))
+            {
+                if (text_of(&decl->ident) == name)
+                {
+                    return decl;
+                }
+            }
+        }
+
+        if (this->parent_block != nullptr)
+        {
+            return this->parent_block->find_decl(name);
+        }
+
+        return nullptr;
+    }
 };
 
 struct AstIf : public AstNode
@@ -176,11 +199,12 @@ struct AstIf : public AstNode
     {
     }
 
-    AstNode *condition;
-    AstBlock body;
+    AstNode *condition{};
+    AstBlock true_block{};
+    AstBlock false_block{};  // TODO: Parse and generate
 };
 
-struct AstReturn : AstNode
+struct AstReturn : public AstNode
 {
     constexpr static AstKind kind = AST_RETURN;
 
@@ -192,7 +216,7 @@ struct AstReturn : AstNode
     AstNode *expr{};
 };
 
-struct AstIdent : AstNode
+struct AstIdent : public AstNode
 {
     constexpr static AstKind kind = AST_IDENT;
 
@@ -204,7 +228,7 @@ struct AstIdent : AstNode
     Token ident{};
 };
 
-struct AstProc : AstNode
+struct AstProc : public AstNode
 {
     constexpr static AstKind kind = AST_PROC;
 
@@ -217,7 +241,7 @@ struct AstProc : AstNode
     AstBlock body{};
 };
 
-struct AstProcCall : AstNode
+struct AstProcCall : public AstNode
 {
     constexpr static AstKind kind = AST_PROC_CALL;
 
@@ -230,7 +254,7 @@ struct AstProcCall : AstNode
     std::vector<AstNode *> arguments{};
 };
 
-struct AstProgram : AstNode
+struct AstProgram : public AstNode
 {
     constexpr static AstKind kind = AST_PROGRAM;
 
@@ -239,7 +263,7 @@ struct AstProgram : AstNode
     {
     }
 
-    AstBlock block{};
+    AstBlock block{};  // TODO: Just make this an array of AstDecls
 };
 
 bool parse_program(std::string_view source, AstProgram *prog);

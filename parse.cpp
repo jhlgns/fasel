@@ -6,9 +6,9 @@
 #include <iostream>
 
 /*
-TODO: Error reporting: at a certain point, we know that a syntax error happened without relying on the parent parse context handling it.
-For example, if we parse the keyword 'proc', then we know we must parse a procedure.
-The parent context might discard the error message and set its own onw...
+TODO: Error reporting: at a certain point, we know that a syntax error happened without relying on the parent parse
+context handling it. For example, if we parse the keyword 'proc', then we know we must parse a procedure. The parent
+context might discard the error message and set its own one...
 */
 
 struct Parser
@@ -139,28 +139,35 @@ Parser parse_statement(Parser p, AstNode **out_statement)
     AstDecl decl{};
     if (maybe(&p, parse_decl(p, &decl)))
     {
-        auto result    = new AstDecl{};
-        *result        = decl;
-        *out_statement = result;
+        *out_statement = new AstDecl{std::move(decl)};
         return p;
     }
 
     if (maybe(&p, eat_keyword(p, "if")))
     {
-        AstIf if_;
+        AstIf if_{};
+        if_.true_block.parent_block  = p.current_block;
+        if_.false_block.parent_block = p.current_block;
+
         if (must(&p, parse_expr(p, &if_.condition)) == false)
         {
             return copy_error(bak, p.error);
         }
 
-        if (must(&p, parse_block(p, &if_.body)) == false)
+        if (must(&p, parse_block(p, &if_.true_block)) == false)
         {
             return copy_error(bak, p.error);
         }
 
-        auto result    = new AstIf{};
-        *result        = std::move(if_);
-        *out_statement = result;
+        if (maybe(&p, eat_keyword(p, "else")))
+        {
+            if (must(&p, parse_block(p, &if_.false_block)) == false)
+            {
+                return copy_error(bak, p.error);
+            }
+        }
+
+        *out_statement = new AstIf{std::move(if_)};
         return p;
     }
 
@@ -172,7 +179,7 @@ Parser parse_statement(Parser p, AstNode **out_statement)
             return copy_error(bak, p.error);
         }
 
-        *out_statement = new AstReturn{ret};
+        *out_statement = new AstReturn{std::move(ret)};
         return p;
     }
 
@@ -183,12 +190,15 @@ Parser parse_statement(Parser p, AstNode **out_statement)
         return p;
     }
 
-    AstBlock block{};
-    if (maybe(&p, parse_block(p, &block)))
+    // AstBlock block{};
+    auto block = new AstBlock{};
+    if (maybe(&p, parse_block(p, block)))
     {
-        *out_statement = new AstBlock{std::move(block)};
+        *out_statement = block; // new AstBlock{std::move(block)};
         return p;
     }
+    else
+        delete block;
 
     return add_error(bak, "Failed to parse statement");
 }
@@ -247,9 +257,9 @@ Parser parse_proc(Parser p, AstProc *out_proc)
         auto bak  = p;
         switch (next_token(&p).type)
         {
-            case TOK_COMMA: break;  // TODO: Allows for ',' at beginning of parameter list
+            case TOK_COMMA:      break;  // TODO: Allows for ',' at beginning of parameter list
             case TOK_CLOSEPAREN: done = 1; break;
-            default:  p = bak; break;
+            default:             p = bak; break;
         }
 
         if (done)
@@ -291,7 +301,16 @@ Parser parse_primary_expr(Parser p, AstNode **out_primary_expr)
         literal->token = t;
         literal->type  = LIT_INT;
 
-        auto result = std::from_chars(t.pos.c, t.pos.c + t.len, literal->int_value);
+        std::from_chars_result result;
+        if (*t.pos.c == '0' && *(t.pos.c + 1) == 'x')
+        {
+            result = std::from_chars(t.pos.c + 2, t.pos.c + t.len, literal->int_value, 16);
+        }
+        else
+        {
+            result = std::from_chars(t.pos.c, t.pos.c + t.len, literal->int_value);
+        }
+
         if (result.ec != std::errc{})
         {
             return add_error(bak, "Failed to parse integer literal");
@@ -314,12 +333,14 @@ Parser parse_primary_expr(Parser p, AstNode **out_primary_expr)
         return p;
     }
 
-    AstProc proc{};
-    if (maybe(&p, parse_proc(p, &proc)))
+    auto proc = new AstProc{};  // TODO
+    if (maybe(&p, parse_proc(p, proc)))
     {
-        *out_primary_expr = new AstProc{proc};
+        *out_primary_expr = proc;
         return p;
     }
+    else
+        delete proc;
 
     return add_error(bak, "Failed to parse primary expression");
 }
@@ -396,10 +417,10 @@ Parser parse_binary_expr(Parser p, AstNode **node, int prev_prec)
             return add_error(bak, "Failed to parse binary operator right hand side");
         }
 
-        auto bin_op   = new AstBinOp{};
+        auto bin_op  = new AstBinOp{};
         bin_op->type = op.type;
-        bin_op->lhs   = lhs;
-        bin_op->rhs   = rhs;
+        bin_op->lhs  = lhs;
+        bin_op->rhs  = rhs;
 
         lhs = bin_op;
     }
@@ -435,6 +456,7 @@ Parser parse_decl(Parser p, AstDecl *decl)
         return copy_error(bak, p.error);
     }
 
+    decl->block     = p.current_block;
     decl->ident     = ident;
     decl->init_expr = init_expr;
 
@@ -489,14 +511,3 @@ bool parse_program(std::string_view source, AstProgram *prog)
 
     return true;
 }
-
-/* Parser parse_brogram(Parser p, void *brogram) */
-/* { */
-/*     auto bak = p; */
-
-/*     if (maybe(&p, eat_keyword(p, "")) == false) */
-/*     { */
-/*         // Error parsing brogram: expected keyword */
-/*         return add_error(bak, p.error); */
-/*     } */
-/* } */
