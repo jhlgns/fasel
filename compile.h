@@ -12,9 +12,7 @@ struct BytecodeWriter
     struct AstBlock *current_block{};
     struct AstProc *current_proc{};
 
-    bool generate_asm{};
-    bool also_generate_bytecode{};
-    std::string asm_source{};
+    std::string disassemble();
 };
 
 std::vector<AstBlock *> get_statement_child_blocks(class AstNode *node);

@@ -13,6 +13,7 @@ add_link_options(-std=c++20 -stdlib=libc++)
 set(shared_source_files
     arena.cpp
     compile.cpp
+    disasm.cpp
     lex.cpp
     parse.cpp
     stringify.cpp

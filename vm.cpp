@@ -1,4 +1,6 @@
 #include "vm.h"
+#include "compile.h"
+#include "disasm.h"
 #include "op_code.h"
 #include "parse.h"
 #include <format>
@@ -49,7 +51,7 @@ void write_memory(Vm *vm, int64_t address, const void *data, size_t len)
 
 void read_memory(Vm *vm, int64_t address, void *data, size_t len)
 {
-    if (address < vm->program_start || address + len > vm->program_end())
+    if (address < vm->program_start || address + len > vm->stack_end())
     {
         fatal_error("Segfault");
     }
@@ -92,27 +94,33 @@ int64_t pop_64(Vm *vm)
     return result;
 }
 
+void load_program(Vm *vm, BytecodeWriter *w)
+{
+    load_program(vm, std::span<uint8_t>{w->bytecode.begin(), w->bytecode.end()});
+}
+
 void load_program(Vm *vm, std::span<uint8_t> bytecode)
 {
     vm->program_length = bytecode.size();
     vm->rip            = Vm::program_start;
     vm->rsp            = vm->stack_start();
+
     vm->memory.resize(Vm::program_start + bytecode.size() + Vm::stack_size);  // TODO: Alignment of stack start?
     memcpy(&vm->memory[Vm::program_start], bytecode.data(), bytecode.size());
 }
 
-void start_call_proc(Vm *vm, struct AstProgram *program, std::string_view proc_name)
+void start_proc_call(Vm *vm, struct AstProgram *program, std::string_view proc_name)
 {
     auto proc_decl = program->block.find_decl(proc_name);
     if (proc_decl == nullptr)
     {
-        fatal_error(std::format("Proc '{}' not found", proc_name));
+        fatal_error(std::format("Procedure '{}' not found", proc_name));
     }
 
-    start_call_proc(vm, proc_decl->address);
+    start_proc_call(vm, proc_decl->address);
 }
 
-void start_call_proc(Vm *vm, int64_t address)
+void start_proc_call(Vm *vm, int64_t address)
 {
     push_64(vm, vm->program_length);  // NOTE: The return address
     vm->rip = Vm::program_start + address;
@@ -120,8 +128,32 @@ void start_call_proc(Vm *vm, int64_t address)
 
 void run_program(Vm *vm)
 {
+    auto debug_mode = strcmp("1", std::getenv("JANG_DEBUG")) == 0;
+
     while (vm->rip < vm->program_end())
     {
+        if (debug_mode)
+        {
+            std::cout << "================[" << vm->rip - Vm::program_start << "]================" << std::endl;
+
+            std::cout << "Stack:" << std::endl;
+
+            auto stack = DEBUG_dump_stack(vm);
+            for (auto i = 0; i < stack.size(); ++i)
+            {
+                std::cout << std::format("{:>7}: {}", i, stack[i]) << std::endl;
+            }
+
+            std::cout << "Program:" << std::endl;
+
+            auto disasm =
+                disassemble(std::span{&vm->memory[Vm::program_start], vm->program_length}, vm->rip - Vm::program_start);
+            std::cout << disasm << std::endl;
+
+            std::string command;
+            std::getline(std::cin, command);
+        }
+
         auto op = read_op(vm);
         switch (op)
         {
@@ -247,21 +279,12 @@ void run_program(Vm *vm)
     {
         fatal_error("Decoding error: RIP is not at the end of the program");
     }
-
-    // printf("Program ran to last instruction\n");
-
-    // TODO
-    // for (auto i = 0; i < vm.rsp / 8; ++i)
-    // {
-    //     auto test = *(int64_t *)vm.stack[i * 8];
-    //     printf("Stack value %d: %ld\n", i, test);
-    // }
 }
 
 void run_main(Vm *vm, AstProgram *program, std::span<uint8_t> bytecode)
 {
     load_program(vm, bytecode);
-    start_call_proc(vm, program, "main");
+    start_proc_call(vm, program, "main");
     run_program(vm);
 }
 

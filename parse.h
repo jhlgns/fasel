@@ -28,7 +28,7 @@ inline const char *to_string(AstKind kind)
         case AST_BLOCK:          return "AST_BLOCK";
         case AST_DECL:           return "AST_DECL";
         case AST_IDENT:          return "AST_IDENT";
-        case AST_IF:             return "AST_F";
+        case AST_IF:             return "AST_IF";
         case AST_LITERAL:        return "AST_LITERAL";
         case AST_PROC:           return "AST_PROC";
         case AST_PROC_CALL:      return "AST_PROC_CALL";
@@ -82,6 +82,7 @@ struct AstDecl : AstNode
 
     // Compiler information
 
+    bool is_proc_arg{};
     struct AstBlock *block{};
     struct AstProc *enclosing_proc{};
     int64_t address{};  // Global declaration: address inside the program
@@ -165,6 +166,7 @@ struct AstBlock : public AstNode
     AstBlock *parent_block{};
     int64_t offset_from_parent_block{};
     int64_t size{};
+    int64_t size_of_args{};
 
     bool is_global() const { return this->parent_block == nullptr; }
 
@@ -200,8 +202,8 @@ struct AstIf : public AstNode
     }
 
     AstNode *condition{};
-    AstBlock true_block{};
-    AstBlock false_block{};  // TODO: Parse and generate
+    AstBlock then_block{};
+    AstBlock else_block{};
 };
 
 struct AstReturn : public AstNode

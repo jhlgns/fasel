@@ -10,7 +10,7 @@ void test_expression(std::string_view expression, int64_t expected_result)
     AstProgram program;
     REQUIRE(parse_program(source, &program));
 
-    BytecodeWriter w{.generate_asm = true, .also_generate_bytecode = true};
+    BytecodeWriter w;
     REQUIRE(generate_code(&program, &w));
 
     Vm vm;
@@ -47,7 +47,7 @@ TEST_CASE("Expression evaluation", "[integration]")
     CASE(0xff ^ 0x70);
     CASE(0xff ^ 0x00);
     CASE(0xff ^ 0x07);
-    CASE(1 << 2 | 3 >> 4);
+    CASE(100 << 2 | 300 >> 4);
     CASE(1 | 2 | 3 | 16);
     CASE(1 & 2 | 3 & 16);
     CASE(1 | 2 & 3 & 16);
@@ -69,4 +69,59 @@ TEST_CASE("Expression evaluation", "[integration]")
 
     CASE(1576 & 2 * 485 / 871 + 5923 % 7 | 16 & 3);
 #undef CASE
+}
+
+int64_t fib(int64_t n)
+{
+    if (n == 0)
+    {
+        return 0;
+    }
+
+    if (n == 1)
+    {
+        return 1;
+    }
+
+    return fib(n - 1) + fib(n - 2);
+}
+
+TEST_CASE("Fibonacci")
+{
+    auto source = std::string_view{R"(
+fib := proc(n i64) {
+    if n == 0 { return 0 }
+    if n == 1 { return 1 }
+
+    return fib(n - 1) + fib(n - 2)
+}
+
+main := proc() {
+    return fib(3)
+}
+)"};
+
+    // TODO: There seems to be something very weird going on.
+    // n is not where it is expected to be because something is
+    // happening with the stack that I don't understand yet.
+    // I think this is a fundamental flaw of how the locals are allocated
+    // and accessed that somehow is unearthed only now. We might need an RBP
+    // or do something smarter with addressing relative to RSP.
+    // TODO: Add a simple test to verify this
+    AstProgram program;
+    REQUIRE(parse_program(source, &program));
+
+    BytecodeWriter w;
+    REQUIRE(generate_code(&program, &w));
+    auto test = w.disassemble();
+
+    Vm vm;
+    load_program(&vm, &w);
+    start_proc_call(&vm, &program, "main");
+    run_program(&vm);
+
+    auto result   = pop_64(&vm);
+    auto expected = fib(20);
+
+    REQUIRE(result == expected);
 }

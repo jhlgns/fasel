@@ -145,29 +145,33 @@ Parser parse_statement(Parser p, AstNode **out_statement)
 
     if (maybe(&p, eat_keyword(p, "if")))
     {
-        AstIf if_{};
-        if_.true_block.parent_block  = p.current_block;
-        if_.false_block.parent_block = p.current_block;
+        // TODO
+        auto if_ = new AstIf{};
+        if_->then_block.parent_block  = p.current_block;
+        if_->else_block.parent_block = p.current_block;
 
-        if (must(&p, parse_expr(p, &if_.condition)) == false)
+        if (must(&p, parse_expr(p, &if_->condition)) == false)
         {
             return copy_error(bak, p.error);
         }
 
-        if (must(&p, parse_block(p, &if_.true_block)) == false)
+        // TODO: Allow simple statements instead of blocks for then and else
+
+        if (must(&p, parse_block(p, &if_->then_block)) == false)
         {
             return copy_error(bak, p.error);
         }
 
         if (maybe(&p, eat_keyword(p, "else")))
         {
-            if (must(&p, parse_block(p, &if_.false_block)) == false)
+            if (must(&p, parse_block(p, &if_->else_block)) == false)
             {
                 return copy_error(bak, p.error);
             }
         }
 
-        *out_statement = new AstIf{std::move(if_)};
+        // *out_statement = new AstIf{std::move(if_)};
+        *out_statement = if_;
         return p;
     }
 
@@ -229,7 +233,7 @@ Parser parse_block(Parser p, AstBlock *out_block)
         AstNode *stmt = nullptr;
         if (must(&p, parse_statement(p, &stmt)) == false)
         {
-            return copy_error(bak, p.error);
+return copy_error(bak, p.error);
         }
 
         out_block->statements.push_back(stmt);

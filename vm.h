@@ -21,9 +21,11 @@ struct Vm
 
 int64_t pop_64(Vm *vm);
 
+// TODO: Make a version of load program that does not reset the RSP such that arguments can be passed by the user manaually
+void load_program(Vm *vm, struct BytecodeWriter *w);
 void load_program(Vm *vm, std::span<uint8_t> bytecode);
-void start_call_proc(Vm *vm, struct AstProgram *program, std::string_view proc_name);
-void start_call_proc(Vm *vm, int64_t address);
+void start_proc_call(Vm *vm, struct AstProgram *program, std::string_view proc_name);
+void start_proc_call(Vm *vm, int64_t address);
 void run_program(Vm *vm);
 
 void run_main(Vm *vm, AstProgram *program, std::span<uint8_t> bytecode);

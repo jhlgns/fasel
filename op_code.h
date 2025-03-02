@@ -96,7 +96,7 @@ enum OpCode : uint8_t
     JMP0,   // dst = read i64; a = pop i64; if a == 0 jmp dst;
     JMP1,   // dst = read i64; a = pop i64; if a != 0 jmp dst;
     JMP,    // dst = read i64; jmp dst;
-    CALL,
+    CALL,   // TODO: Make a version of this instruction with the target address baked in statically
     RET,    // value = pop i64; ret = pop i64; push i64 value; jmp ret;
 };
 

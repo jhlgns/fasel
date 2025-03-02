@@ -1,8 +1,14 @@
 #include "compile.h"
 #include "basics.h"
+#include "disasm.h"
 #include "parse.h"
 #include <format>
+#include <span>
 
+std::string BytecodeWriter::disassemble()
+{
+    return ::disassemble(std::span{this->bytecode.begin(), this->bytecode.end()});
+}
 std::vector<AstBlock *> get_statement_child_blocks(AstNode *node)
 {
     if (auto block = ast_cast<AstBlock>(node))
@@ -12,7 +18,7 @@ std::vector<AstBlock *> get_statement_child_blocks(AstNode *node)
 
     if (auto if_ = ast_cast<AstIf>(node))
     {
-        return {&if_->true_block, &if_->false_block};
+        return {&if_->then_block, &if_->else_block};
     }
 
     // TODO: Handle AST_IF, AST_WHILE etc. once they are implemented
@@ -30,12 +36,15 @@ void allocate_locals(AstBlock *block)
         {
             auto size_of_decl = 8;  // TODO
             decl->address     = block->offset_from_parent_block + block->size;
-            // for (auto current = block->parent_block; current != nullptr; current = current->parent_block)
-            // {
-            //     decl->address += current->offset_from_parent_block;
-            // }
 
             block->size += size_of_decl;
+            if (decl->is_proc_arg)
+            {
+                // The return address is at the top of the stack
+                // TODO: This is smelly... Must think about this, but works for now.
+                decl->address -= 8;
+                block->size_of_args += size_of_decl;
+            }
         }
     }
 
@@ -84,16 +93,6 @@ void _write64(int64_t value, BytecodeWriter *w)
 int64_t write_op(OpCode op, BytecodeWriter *w)
 {
     auto addr = w->pos;
-
-    if (w->generate_asm)
-    {
-        w->asm_source += std::format("{}\n", to_string(op));
-        if (w->also_generate_bytecode == false)
-        {
-            return addr;
-        }
-    }
-
     _write8(op, w);
 
     return addr;
@@ -102,16 +101,6 @@ int64_t write_op(OpCode op, BytecodeWriter *w)
 int64_t write_op_8(OpCode op, uint8_t value, BytecodeWriter *w)
 {
     auto addr = w->pos;
-
-    if (w->generate_asm)
-    {
-        w->asm_source += std::format("{} {}\n", to_string(op), value);
-        if (w->also_generate_bytecode == false)
-        {
-            return addr;
-        }
-    }
-
     _write8(op, w);
     _write8(value, w);
 
@@ -121,16 +110,6 @@ int64_t write_op_8(OpCode op, uint8_t value, BytecodeWriter *w)
 int64_t write_op_64(OpCode op, int64_t value, BytecodeWriter *w)
 {
     auto addr = w->pos;
-
-    if (w->generate_asm)
-    {
-        w->asm_source += std::format("{} {}\n", to_string(op), value);
-        if (w->also_generate_bytecode == false)
-        {
-            return addr;
-        }
-    }
-
     _write8(op, w);
     _write64(value, w);
 
@@ -333,15 +312,14 @@ bool is_expression(AstKind kind)
 
         if (w->current_block->is_global())
         {
-            auto address = w->bytecode.size();
-            if (generate_code(decl->init_expr, w) == false)
+            decl->address = w->bytecode.size();
+
+            if (decl->init_expr != nullptr && generate_code(decl->init_expr, w) == false)
             {
                 return false;
             }
-
-            decl->address = address;
         }
-        else
+        else if (decl->init_expr != nullptr)
         {
             if (generate_expr(decl->init_expr, w) == false)
             {
@@ -364,6 +342,16 @@ bool is_expression(AstKind kind)
 
     if (auto proc_call = ast_cast<AstProcCall>(node))
     {
+        for (auto i = 0; i < proc_call->arguments.size(); ++i)
+        {
+            // auto arg = proc_call->arguments[proc_call->arguments.size() - i - 1];
+            auto arg = proc_call->arguments[i];
+            if (generate_code(arg, w) == false)
+            {
+                return false;
+            }
+        }
+
         if (generate_expr(proc_call->proc, w) == false)
         {
             return false;
@@ -375,6 +363,9 @@ bool is_expression(AstKind kind)
 
     if (auto proc = ast_cast<AstProc>(node))
     {
+        // TODO: Pop the arguments TODO: No, why, they would just get pushed again either way, right? But their
+        // addresses must be set.
+
         auto prev_proc  = w->current_proc;
         w->current_proc = proc;
         defer
@@ -382,10 +373,31 @@ bool is_expression(AstKind kind)
             w->current_proc = prev_proc;
         };
 
+        std::vector<AstDecl *> arg_decls;
+        for (auto arg : proc->signature.arguments)
+        {
+            if (proc->body.find_decl(text_of(&arg.ident)) != nullptr)
+            {
+                compile_error(w, "TODO");
+                return false;
+            }
+
+            // TODO Copy type
+            auto decl         = new AstDecl{};
+            decl->block       = &proc->body;
+            decl->ident       = arg.ident;
+            decl->is_proc_arg = true;
+            // decl->enclosing_proc = proc;
+
+            arg_decls.push_back(decl);
+        }
+
+        proc->body.statements.insert(proc->body.statements.begin(), arg_decls.begin(), arg_decls.end());
+
         allocate_locals(&proc->body);
 
         // Make stack space for the locals
-        write_op_64(ADDRSP, proc->body.size, w);
+        write_op_64(ADDRSP, proc->body.size - proc->body.size_of_args, w);
 
         return generate_code(&proc->body, w);
     }
@@ -416,7 +428,7 @@ bool is_expression(AstKind kind)
         auto jmp0_false_pos = w->pos;
         write_op_64(JMP0, 333, w);
 
-        if (generate_code(&if_->true_block, w) == false)
+        if (generate_code(&if_->then_block, w) == false)
         {
             return false;
         }
@@ -424,6 +436,8 @@ bool is_expression(AstKind kind)
         auto false_label = w->pos;
         w->pos           = jmp0_false_pos;
         write_op_64(JMP0, false_label, w);
+
+        // TODO: Else block
 
         w->pos = false_label;
 

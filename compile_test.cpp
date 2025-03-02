@@ -3,17 +3,12 @@
 #include "parse.h"
 #include <string_view>
 
-BytecodeWriter make_mock_writer()
-{
-    return BytecodeWriter{.generate_asm = true, .also_generate_bytecode = true};
-}
-
 void test_codegen(std::string_view source, BytecodeWriter *mock)
 {
     AstProgram program;
     REQUIRE(parse_program(source, &program));
 
-    BytecodeWriter w{.generate_asm = true, .also_generate_bytecode = true};
+    BytecodeWriter w;
     REQUIRE(generate_code(&program, &w));
 
     // printf("Source code:\n%s\n", source.data());
@@ -106,7 +101,7 @@ main := proc() {
 }
 )"};
 
-    auto mock = make_mock_writer();
+    BytecodeWriter mock{};
 
     auto total = 56;
     auto a     = 0 - total;
@@ -160,7 +155,7 @@ main := proc() {
 }
 )"};
 
-    auto mock = make_mock_writer();
+    BytecodeWriter mock{};
 
     auto total = 24;
     auto a     = 0 - total;
@@ -194,7 +189,7 @@ main := proc() {
 }
 )"};
 
-    auto mock = make_mock_writer();
+    BytecodeWriter mock{};
 
     write_op_64(ADDRSP, 8, &mock);
     write_op_64(PUSHC, 1, &mock);
@@ -316,7 +311,7 @@ main := proc() {
     auto a     = 0 - total;
     auto b     = 8 - total;
 
-    auto mock = make_mock_writer();
+    BytecodeWriter mock{};
 
     write_op_64(ADDRSP, total, &mock);
     write_op_64(PUSHC, 1, &mock);
@@ -339,7 +334,7 @@ main := proc() {
     test_codegen(source, &mock);
 }
 
-TEST_CASE("Procedure calling")
+TEST_CASE("Basic procedure calling")
 {
     auto source = std::string_view{
         R"(
@@ -352,13 +347,59 @@ main := proc() {
 }
 )"};
 
-    auto mock = make_mock_writer();
+    BytecodeWriter mock{};
 
     write_op_64(ADDRSP, 0, &mock);
     write_op_64(PUSHC, 456, &mock);
     write_op(RET, &mock);
 
     write_op_64(ADDRSP, 0, &mock);
+    write_op_64(PUSHC, 0, &mock);
+    write_op(CALL, &mock);
+    write_op(RET, &mock);
+
+    test_codegen(source, &mock);
+}
+
+TEST_CASE("Procedure calling with arguments")
+{
+    auto source = std::string_view{
+        R"(
+f := proc(a i64, b i64, c i64) {
+    d := 5
+    return a + b * c - d
+}
+
+main := proc() {
+    return f(1, 2, 3)
+}
+)"};
+
+    auto total = 32;
+    auto a     = 0 - total;
+    auto b     = 8 - total;
+    auto c     = 16 - total;
+    auto d     = 24 - total;
+
+    BytecodeWriter mock{};
+
+    write_op_64(ADDRSP, 8, &mock);
+    write_op_64(PUSHC, 5, &mock);
+    write_op_64(STORER, d, &mock);
+    write_op_64(LOADR, a, &mock);
+    write_op_64(LOADR, b, &mock);
+    write_op_64(LOADR, c, &mock);
+    write_op(MUL, &mock);
+    write_op(ADD, &mock);
+    write_op_64(LOADR, d, &mock);
+    write_op(SUB, &mock);
+    write_op_64(ADDRSP, -total, &mock);
+    write_op(RET, &mock);
+
+    write_op_64(ADDRSP, 0, &mock);
+    write_op_64(PUSHC, 1, &mock);
+    write_op_64(PUSHC, 2, &mock);
+    write_op_64(PUSHC, 3, &mock);
     write_op_64(PUSHC, 0, &mock);
     write_op(CALL, &mock);
     write_op(RET, &mock);

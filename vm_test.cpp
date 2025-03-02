@@ -181,7 +181,7 @@ TEST_CASE("CALL", "[vm]")
 
     Vm vm;
     load_program(&vm, std::span<uint8_t>{w.bytecode.begin(), w.bytecode.end()});
-    start_call_proc(&vm, main);
+    start_proc_call(&vm, main);
     run_program(&vm);
 
     REQUIRE(pop_64(&vm) == 9);
