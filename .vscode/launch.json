@@ -20,7 +20,7 @@
             "name": "Debug tests",
             "program": "${workspaceFolder}/build/tests",
             // "args": ["Procedure calling with arguments"],
-            "args": ["Fibonacci"],
+            "args": ["[parsing]"],
             "cwd": "${workspaceFolder}/build"
         }
     ]

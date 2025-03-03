@@ -8,7 +8,6 @@
 #include "basics.h"
 #include "compile.h"
 #include "parse.h"
-#include "stringify.h"
 
 int main(int argc, char **argv)
 {
@@ -54,7 +53,7 @@ int main(int argc, char **argv)
 
     Lexer l{
         .source = source,
-        .start  = {.c = source},
+        // .start  = {.c = source},
         .at     = {.c = source},
     };
 

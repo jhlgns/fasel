@@ -384,7 +384,6 @@ bool is_expression(AstKind kind)
 
             // TODO Copy type
             auto decl         = new AstDecl{};
-            decl->block       = &proc->body;
             decl->ident       = arg.ident;
             decl->is_proc_arg = true;
             // decl->enclosing_proc = proc;

@@ -137,9 +137,10 @@ inline std::string_view text_of(Token *token)
 struct Lexer
 {
     std::string_view source;
-    LexerPos start;
+    // LexerPos start;
     LexerPos at;
 };
 
 Token next_token(Lexer *l);
+Token peek_token(const Lexer *l);
 void reset(Lexer *l, Token token);

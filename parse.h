@@ -83,7 +83,6 @@ struct AstDecl : AstNode
     // Compiler information
 
     bool is_proc_arg{};
-    struct AstBlock *block{};
     struct AstProc *enclosing_proc{};
     int64_t address{};  // Global declaration: address inside the program
                         // Local declaration (procedure): offset from procedure stack base

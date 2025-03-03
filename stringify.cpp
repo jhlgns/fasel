@@ -59,6 +59,23 @@ std::string to_string(int indent_level, AstIdent *node)
     return result;
 }
 
+std::string to_string(int indent_level, AstIf *node)
+{
+    std::string result;
+
+    // TODO
+    result += std::format("{}\n", indent(indent_level, std::format("If(\n")));
+    result += std::format("{}\n", indent(indent_level + 1, "Condition:\n"));
+    result += std::format("{}\n", dump_node(indent_level + 2, node->condition));
+    result += std::format("{}\n", indent(indent_level + 1, "Then:\n"));
+    result += std::format("{}\n", dump_node(indent_level + 2, &node->then_block));
+    result += std::format("{}\n", indent(indent_level + 1, "Else:\n"));
+    result += std::format("{}\n", dump_node(indent_level + 2, &node->else_block));
+    result += indent(indent_level, std::format(")"));
+
+    return result;
+}
+
 std::string to_string(int indent_level, AstLiteral *node)
 {
     std::string result;
@@ -162,6 +179,7 @@ std::string dump_node(int indent_level, AstNode *node)
         case AST_BIN_OP:         return to_string(indent_level, static_cast<AstBinOp *>(node));
         case AST_BLOCK:          return to_string(indent_level, static_cast<AstBlock *>(node));
         case AST_DECL:           return to_string(indent_level, static_cast<AstDecl *>(node));
+        case AST_IF:             return to_string(indent_level, static_cast<AstIf *>(node));
         case AST_IDENT:          return to_string(indent_level, static_cast<AstIdent *>(node));
         case AST_LITERAL:        return to_string(indent_level, static_cast<AstLiteral *>(node));
         case AST_ARG:            return to_string(indent_level, static_cast<AstArg *>(node));

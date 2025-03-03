@@ -21,14 +21,14 @@ void next(LexerPos *p, int n = 1)
     }
 }
 
-Token emit(Lexer *l, TokenType t)
+Token emit(Lexer *l, LexerPos start, TokenType t)
 {
-    assert(t == TOK_EOF || l->at.c > l->start.c);
+    assert(t == TOK_EOF || l->at.c > start.c);
 
     return Token{
         .type = t,
-        .pos  = l->start,
-        .len  = static_cast<size_t>(l->at.c - l->start.c),
+        .pos  = start,
+        .len  = static_cast<size_t>(l->at.c - start.c),
     };
 }
 
@@ -80,7 +80,7 @@ Token next_token(Lexer *l)
     {
     }
 
-    l->start = l->at;
+    auto start = l->at;
 
     // clang-format off
     auto simple_tokens = {
@@ -123,16 +123,16 @@ Token next_token(Lexer *l)
     {
         if (eat_seq(l, text))
         {
-            return emit(l, type);
+            return emit(l, start, type);
         }
     }
 
-    for (; is_ident(*l->at.c, l->at.c - l->start.c); next(&l->at))
+    for (; is_ident(*l->at.c, l->at.c - start.c); next(&l->at))
     {
     }
-    if (l->at.c > l->start.c)
+    if (l->at.c > start.c)
     {
-        return emit(l, TOK_IDENT);
+        return emit(l, start, TOK_IDENT);
     }
 
     if (is_digit(*l->at.c))
@@ -147,24 +147,32 @@ Token next_token(Lexer *l)
         {
         }
     }
-    if (l->at.c > l->start.c)
+    if (l->at.c > start.c)
     {
-        return emit(l, TOK_NUM_LIT);
+        return emit(l, start, TOK_NUM_LIT);
     }
 
     if (*l->at.c == '\0')
     {
-        return emit(l, TOK_EOF);
+        return emit(l, start, TOK_EOF);
     }
 
     printf("Lexer error at %d:%d: unable to parse token.\n", l->at.line, l->at.line_offset);
     next(&l->at);
 
-    return emit(l, TOK_EOF);
+    return emit(l, start, TOK_EOF);
+}
+
+Token peek_token(const Lexer *l)
+{
+    auto temp = *l;
+    auto token = next_token(&temp);
+
+    return token;
 }
 
 void reset(Lexer *l, Token token)
 {
-    l->start = token.pos;
+    // l->start = token.pos;
     l->at    = token.pos;
 }
