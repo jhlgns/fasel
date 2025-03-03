@@ -1,5 +1,6 @@
 #include "parse.h"
 #include "arena.h"
+#include "string_util.hpp"
 #include <charconv>
 #include <format>
 #include <iostream>
@@ -31,33 +32,17 @@ struct Parser
         }
 
         auto current_token = start->peek_token();
-        auto line_start    = current_token.pos.c;
-        while (line_start + 1 > start->lexer.source && *(line_start - 1) != '\n')
-        {
-            --line_start;
-        }
 
-        while (*line_start != '\n' && (*line_start == ' ' || *line_start == '\t'))
-        {
-            ++line_start;
-        }
+        auto line = get_line(start->lexer.source, current_token.pos.c);
 
-        auto line_end = current_token.pos.c;
-        while (*line_end != '\n' && line_end + 1 < start->lexer.source.data() + start->lexer.source.size())
-        {
-            ++line_end;
-        }
+        auto message = std::format(
+            "Parser error at {}:{}\n{}\n{}",
+            start->lexer.at.line,
+            start->lexer.at.line_offset,
+            line,
+            error);
 
-        auto line = std::string_view{line_start, line_end};
-        assert(line.find("\n") == std::string_view::npos);
-
-        std::cout << std::format(
-                         "Parser error at {}:{}\n{}\n{}",
-                         start->lexer.at.line,
-                         start->lexer.at.line_offset,
-                         line,
-                         error)
-                  << std::endl;
+        std::cout << message << std::endl;
     }
 
     Parser expect_token(TokenType type, Token *token) const

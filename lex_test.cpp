@@ -6,7 +6,7 @@ void require_sequence(std::string_view source, std::vector<std::function<bool(To
     // TODO
 }
 
-TEST_CASE("Integer literals", "[lexing]")
+TEST_CASE("Integer literals", "[lex]")
 {
     require_sequence(
         "1",

@@ -41,6 +41,7 @@ add_executable(
     integration_tests.cpp
     lex_test.cpp
     parse_test.cpp
+    string_util_test.cpp
     vm_test.cpp
     ${shared_source_files})
 target_include_directories(tests PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

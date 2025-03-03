@@ -86,7 +86,7 @@ int64_t fib(int64_t n)
     return fib(n - 1) + fib(n - 2);
 }
 
-TEST_CASE("Fibonacci")
+TEST_CASE("Fibonacci", "[integration]")
 {
     auto source = std::string_view{R"(
 fib := proc(n i64) {

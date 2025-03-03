@@ -77,7 +77,7 @@ void require_allocation(
     }
 }
 
-TEST_CASE("Locals get allocated and assigned to their init expression")
+TEST_CASE("Locals get allocated and assigned to their init expression", "[compile]")
 {
     auto source = std::string_view{
         R"(
@@ -141,7 +141,7 @@ main := proc() {
     test_codegen(source, &mock);
 }
 
-TEST_CASE("Local variable initialization with nested blocks")
+TEST_CASE("Local variable initialization with nested blocks", "[compile]")
 {
     auto source = std::string_view{
         R"(
@@ -180,7 +180,7 @@ main := proc() {
     test_codegen(source, &mock);
 }
 
-TEST_CASE("An implicit return statement is generated if it missing in the source code")
+TEST_CASE("An implicit return statement is generated if it missing in the source code", "[compile]")
 {
     auto source = std::string_view{
         R"(
@@ -199,7 +199,7 @@ main := proc() {
     test_codegen(source, &mock);
 }
 
-TEST_CASE("Local variable allocation 1")
+TEST_CASE("Local variable allocation 1", "[compile]")
 {
     auto source = std::string_view{
         R"(
@@ -234,7 +234,7 @@ main := proc() {
         });
 }
 
-TEST_CASE("Local variable allocation 2")
+TEST_CASE("Local variable allocation 2", "[compile]")
 {
     auto source = std::string_view{
         R"(
@@ -262,7 +262,7 @@ main := proc() {
         });
 }
 
-TEST_CASE("Local variable allocation 3")
+TEST_CASE("Local variable allocation 3", "[compile]")
 {
     auto source = std::string_view{
         R"(
@@ -291,7 +291,7 @@ main := proc() {
         });
 }
 
-TEST_CASE("If 1")
+TEST_CASE("If 1", "[compile]")
 {
     auto source = std::string_view{
         R"(
@@ -334,7 +334,7 @@ main := proc() {
     test_codegen(source, &mock);
 }
 
-TEST_CASE("Basic procedure calling")
+TEST_CASE("Basic procedure calling", "[compile]")
 {
     auto source = std::string_view{
         R"(
@@ -361,7 +361,7 @@ main := proc() {
     test_codegen(source, &mock);
 }
 
-TEST_CASE("Procedure calling with arguments")
+TEST_CASE("Procedure calling with arguments", "[compile]")
 {
     auto source = std::string_view{
         R"(
