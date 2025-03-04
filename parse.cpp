@@ -51,7 +51,7 @@ struct Parser
     Token next_token()
     {
         auto token = this->lexer.next_token();
-        while (token.type == Tt::single_line_comment)
+        while (token.type == Tt::single_line_comment || token.type == Tt::multi_line_comment)
         {
             token = this->lexer.next_token();
         }
@@ -456,12 +456,18 @@ Parser parse_type(Parser p, AstNode **out_type)
 {
     auto start = p;
 
-    if (!(p >>= p.parse_token(Tt::identifier)))
+    Token identifier;
+    if (p >>= p.parse_token(Tt::identifier, &identifier))
     {
-        return start;
+        auto type        = new AstSimpleType{};
+        type->identifier = identifier;
+
+        *out_type = type;
+
+        return p;
     }
 
-    return p;
+    return start;
 }
 
 Parser parse_decl(Parser p, AstDeclaration *decl)
@@ -477,6 +483,8 @@ Parser parse_decl(Parser p, AstDeclaration *decl)
     {
         return start;
     }
+
+    p.arm("parsing declaration");
 
     auto has_type = p >>= parse_type(p.quiet(), &decl->type);
 

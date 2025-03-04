@@ -102,6 +102,34 @@ Token Lexer::next_token()
         return emit(*this, start, Tt::single_line_comment);
     }
 
+    if (consume_sequence(*this, "/*"))
+    {
+        auto depth = 1;
+        while (depth > 0)
+        {
+            if (consume_sequence(*this, "/*"))
+            {
+                ++depth;
+                continue;
+            }
+
+            if (consume_sequence(*this, "*/"))
+            {
+                --depth;
+                continue;
+            }
+
+            if (*this->cursor.at == '\0')
+            {
+                break;
+            }
+
+            next(this->cursor);
+        }
+
+        return emit(*this, start, Tt::multi_line_comment);
+    }
+
     // clang-format off
     auto simple_tokens = {
         std::make_tuple("return", Tt::keyword),

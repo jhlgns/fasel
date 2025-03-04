@@ -84,7 +84,8 @@ namespace assertions
 
     struct Declaration
     {
-        assertions::Token identifier;
+        std::string_view identifier;
+        Assertion<AstNode *> type;
         Assertion<AstNode *> init_expression;
 
         void operator()(AstNode *node)
@@ -92,7 +93,8 @@ namespace assertions
             auto decl = ast_cast<AstDeclaration>(node);
             REQUIRE(decl != nullptr);
 
-            this->identifier(decl->identifier);
+            REQUIRE(this->identifier == decl->identifier.text());
+            this->type(decl->type);
             this->init_expression(decl->init_expression);
         }
     };
@@ -229,23 +231,26 @@ namespace assertions
 
     struct SimpleType
     {
-        Token identifier;
+        explicit SimpleType(std::string_view identifier)
+            : identifier{identifier}
+        {
+        }
+
+        std::string_view identifier;
 
         void operator()(AstNode *node)
         {
             auto type = ast_cast<AstSimpleType>(node);
             REQUIRE(type != nullptr);
 
-            this->identifier(type->identifier);
+            REQUIRE(this->identifier == type->identifier.text());
         }
     };
 }  // namespace assertions
 
-void test_integer_literal(std::string_view literal_text, int64_t expected_value)
+AstProcedure *parse_program_and_get_main(std::string_view source)
 {
-    AstProgram program;
-
-    auto source = std::format("main := proc() {{ a := {} }}", literal_text);
+    AstProgram program{};
     REQUIRE(parse_program(source, &program));
 
     auto main_decl = program.block.find_declaration("main");
@@ -254,19 +259,36 @@ void test_integer_literal(std::string_view literal_text, int64_t expected_value)
     auto main = ast_cast<AstProcedure>(main_decl->init_expression);
     REQUIRE(main != nullptr);
 
-    auto a_decl = ast_cast<AstDeclaration>(main->body.statements.front());
-    REQUIRE(a_decl != nullptr);
+    return main;
+}
 
-    auto literal = ast_cast<AstLiteral>(a_decl->init_expression);
-    REQUIRE(literal != nullptr);
+void test_integer_literal(std::string_view literal_text, int64_t expected_value)
+{
+    namespace as = assertions;
 
-    REQUIRE(literal->int_value == expected_value);
+    AstProgram program;
+
+    auto source = std::format("main := proc() {{ a := {} }}", literal_text);
+    REQUIRE(parse_program(source, &program));
+
+    auto main_decl = program.block.find_declaration("main");
+    REQUIRE(main_decl != nullptr);
+
+    as::Procedure{
+        .signature = as::Nop{},
+
+        .body = as::Block{
+            .statements = {
+                as::Declaration{
+                    .identifier      = "a",
+                    .type            = as::Null{},
+                    .init_expression = as::Literal{.int_value = expected_value},
+                },
+            }}}(main_decl->init_expression);
 }
 
 TEST_CASE("Integer literals", "[parse]")
 {
-    // TODO: Rewrite using the assertions
-
 #define CASE(literal) test_integer_literal(#literal, literal);
     CASE(0);
     CASE(1);
@@ -274,7 +296,6 @@ TEST_CASE("Integer literals", "[parse]")
     CASE(788);
     CASE(789237489234);
     CASE(9223372036854775807);  // int64_t max value
-    // CASE(-9223372036854775807);  // int64_t min value
 
     CASE(0x0);
     CASE(0x00003);
@@ -365,15 +386,6 @@ main := proc() {
 }
 )"};
 
-    AstProgram program{};
-    REQUIRE(parse_program(source, &program));
-
-    auto main_decl = program.block.find_declaration("main");
-    REQUIRE(main_decl != nullptr);
-
-    auto main = ast_cast<AstProcedure>(main_decl->init_expression);
-    REQUIRE(main != nullptr);
-
     as::Procedure{
         .signature = as::Nop{},
 
@@ -434,17 +446,61 @@ main := proc() {
                     //     .rhs = ,
                     // },
                     },
-            }}(main);
+            }}(parse_program_and_get_main(source));
 }
 
 TEST_CASE("Declaration", "[parse]")
 {
-    // TODO
+    namespace as = assertions;
+
+    std::string_view source{R"(
+main := proc() {
+    a: i64
+    b: i64 = 2
+    c := 3
+}
+)"};
+
+    as::Procedure{
+        .signature = as::Nop{},
+
+        .body =
+            as::Block{
+                .statements =
+                    {
+                        as::Declaration{
+                            .identifier      = "a",
+                            .type            = as::SimpleType{"i64"},
+                            .init_expression = as::Null{},
+                        },
+                        as::Declaration{
+                            .identifier      = "b",
+                            .type            = as::SimpleType{"i64"},
+                            .init_expression = as::Literal{.int_value = 2},
+                        },
+                        as::Declaration{
+                            .identifier      = "c",
+                            .type            = as::Null{},
+                            .init_expression = as::Literal{.int_value = 3},
+                        },
+                    }},
+    }(parse_program_and_get_main(source));
 }
 
 TEST_CASE("Program", "[parse]")
 {
     std::string_view source{R"(
+/*
+Multiline
+Comment
+
+/* nested /* comments */
+*/
+
+*/
+
+// Single line comment
+
 f := proc(a: int, b: int) {
     if a == 1 {
         return a * b + 2 >> 2

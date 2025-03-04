@@ -6,7 +6,7 @@
 
 MemoryPool::MemoryPool(size_t capacity)
     : capacity{capacity}
-    , memory_start{(char *)malloc(capacity)}
+    , memory_start{static_cast<char *>(malloc(capacity))}
 {
     this->cursor = this->memory_start;
 }

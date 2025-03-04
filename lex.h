@@ -39,6 +39,7 @@ enum class TokenType
     keyword,
     numerical_literal,
     single_line_comment, // ...
+    multi_line_comment,  // /* ... */
 
     eof,
 };
@@ -78,6 +79,9 @@ inline const char *to_string(TokenType t)
         case Tt::identifier:            return "identifier";
         case Tt::keyword:               return "keyword";
         case Tt::numerical_literal:     return "numerical_literal";
+        case Tt::single_line_comment:   return "single_line_comment";
+        case Tt::multi_line_comment:    return "multi_line_comment";
+        case Tt::eof:                   return "eof";
         default:                        return "(unknown!)";
     }
 }

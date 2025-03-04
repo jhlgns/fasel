@@ -3,7 +3,7 @@
 
 TEST_CASE("Line extraction", "[string_util]")
 {
-    std::string_view test_cases[][2] = {
+    std::string_view cases[][2] = {
         {"", ""},
         {"x", "x"},
         {"xyz", "xyz"},
@@ -20,7 +20,7 @@ TEST_CASE("Line extraction", "[string_util]")
         {" \n \txyz \t \n ", "xyz"},
     };
 
-    for (const auto [source, expected_line] : test_cases)
+    for (const auto [source, expected_line] : cases)
     {
         auto offset = source.find('x');
         if (offset == std::string_view::npos)
