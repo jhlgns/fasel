@@ -1,54 +1,57 @@
 #include "lex.h"
 
-void next(LexerPos *p, int n = 1)
+#include <format>
+#include <iostream>
+
+void next(Cursor &cursor, int n = 1)
 {
-    for (int i = 0; i < n; ++i, ++p->c)
+    for (int i = 0; i < n; ++i, ++cursor.at)
     {
-        if (*p->c == '\0')
+        if (*cursor.at == '\0')
         {
             break;
         }
 
-        if (*p->c == '\n')
+        if (*cursor.at == '\n')
         {
-            ++p->line;
-            p->line_offset = 0;
+            ++cursor.line;
+            cursor.line_offset = 0;
         }
         else
         {
-            ++p->line_offset;
+            ++cursor.line_offset;
         }
     }
 }
 
-Token emit(Lexer *l, LexerPos start, TokenType t)
+Token emit(Lexer &lexer, const Cursor &start, TokenType t)
 {
-    assert(t == TOK_EOF || l->at.c > start.c);
+    assert(t == Tt::eof || lexer.cursor.at > start.at);
 
     return Token{
         .type = t,
         .pos  = start,
-        .len  = static_cast<size_t>(l->at.c - start.c),
+        .len  = static_cast<size_t>(lexer.cursor.at - start.at),
     };
 }
 
-bool eat_seq(Lexer *l, std::string_view txt)
+bool consume_sequence(Lexer &lexer, std::string_view prefix)
 {
-    if (l->at.c - l->source.data() + txt.size() > l->source.size())
+    if (lexer.cursor.at - lexer.source.data() + prefix.size() > lexer.source.size())
     {
-        return 0;
+        return false;
     }
 
-    for (int i = 0; i < txt.size(); ++i)
+    for (int i = 0; i < prefix.size(); ++i)
     {
-        if (l->at.c[i] != txt[i])
+        if (lexer.cursor.at[i] != prefix[i])
         {
-            return 0;
+            return false;
         }
     }
 
-    next(&l->at, txt.size());
-    return 1;
+    next(lexer.cursor, prefix.size());
+    return true;
 }
 
 bool is_ident(char c, int i)
@@ -71,108 +74,113 @@ bool is_hex_digit(char c)
     return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F';
 }
 
-Token next_token(Lexer *l)
+Token Lexer::peek_token() const
+{
+    auto temp  = *this;
+    auto token = temp.next_token();
+
+    return token;
+}
+
+Token Lexer::next_token()
 {
     // TODO: Comments
     // TODO: Floating point literals
 
-    for (; is_white(*l->at.c); next(&l->at))
+    for (; is_white(*this->cursor.at); next(this->cursor))
     {
     }
 
-    auto start = l->at;
+    auto start = this->cursor;
+
+    if (consume_sequence(*this, "//"))
+    {
+        for (; *this->cursor.at && *this->cursor.at != '\n'; next(this->cursor))
+        {
+        }
+
+        return emit(*this, start, Tt::single_line_comment);
+    }
 
     // clang-format off
     auto simple_tokens = {
-        std::make_tuple("return", TOK_KEYWORD),
-        std::make_tuple("while", TOK_KEYWORD),
-        std::make_tuple("proc", TOK_KEYWORD),
-        std::make_tuple("else", TOK_KEYWORD),
-        std::make_tuple("if", TOK_KEYWORD),
+        std::make_tuple("return", Tt::keyword),
+        std::make_tuple("while", Tt::keyword),
+        std::make_tuple("proc", Tt::keyword),
+        std::make_tuple("else", Tt::keyword),
+        std::make_tuple("if", Tt::keyword),
 
-        std::make_tuple(":=", TOK_DECLASSIGN),
-        std::make_tuple("<<", TOK_LEFTSHIFT),
-        std::make_tuple(">>", TOK_RIGHTSHIFT),
-        std::make_tuple("&&", TOK_AND),
-        std::make_tuple("||", TOK_OR),
-        std::make_tuple("==", TOK_EQ),
-        std::make_tuple("!=", TOK_NE),
-        std::make_tuple(">=", TOK_GE),
-        std::make_tuple("<=", TOK_LE),
+        // std::make_tuple(":=", Tt::declaration_assignment),
+        std::make_tuple("<<", Tt::left_shift),
+        std::make_tuple(">>", Tt::right_shift),
+        std::make_tuple("&&", Tt::logical_and),
+        std::make_tuple("||", Tt::logical_or),
+        std::make_tuple("==", Tt::equal),
+        std::make_tuple("!=", Tt::inequal),
+        std::make_tuple(">=", Tt::greater_than_or_equal),
+        std::make_tuple("<=", Tt::less_than_or_equal),
 
-        std::make_tuple("*", TOK_ASTERISK),
-        std::make_tuple("/", TOK_SLASH),
-        std::make_tuple("%", TOK_MOD),
-        std::make_tuple("+", TOK_PLUS),
-        std::make_tuple("-", TOK_MINUS),
-        std::make_tuple("=", TOK_ASSIGN),
-        std::make_tuple("&", TOK_BIT_AND),
-        std::make_tuple("^", TOK_BIT_XOR),
-        std::make_tuple("|", TOK_BIT_OR),
-        std::make_tuple(",", TOK_COMMA),
-        std::make_tuple("(", TOK_OPENPAREN),
-        std::make_tuple(")", TOK_CLOSEPAREN),
-        std::make_tuple("{", TOK_OPENBRACE),
-        std::make_tuple("}", TOK_CLOSEBRACE),
-        std::make_tuple(">", TOK_GT),
-        std::make_tuple("<", TOK_LT),
+        std::make_tuple("*", Tt::asterisk),
+        std::make_tuple("/", Tt::slash),
+        std::make_tuple("%", Tt::mod),
+        std::make_tuple("+", Tt::plus),
+        std::make_tuple("-", Tt::minus),
+        std::make_tuple("=", Tt::assign),
+        std::make_tuple("&", Tt::bit_and),
+        std::make_tuple("^", Tt::bit_xor),
+        std::make_tuple("|", Tt::bit_or),
+        std::make_tuple(",", Tt::comma),
+        std::make_tuple("(", Tt::parenthesis_open),
+        std::make_tuple(")", Tt::parenthesis_close),
+        std::make_tuple("{", Tt::brace_open),
+        std::make_tuple("}", Tt::brace_close),
+        std::make_tuple(">", Tt::greater_than),
+        std::make_tuple("<", Tt::less_than),
+        std::make_tuple(":", Tt::colon),
     };
     // clang-format on
 
     for (auto [text, type] : simple_tokens)
     {
-        if (eat_seq(l, text))
+        if (consume_sequence(*this, text))
         {
-            return emit(l, start, type);
+            return emit(*this, start, type);
         }
     }
 
-    for (; is_ident(*l->at.c, l->at.c - start.c); next(&l->at))
+    for (; is_ident(*this->cursor.at, this->cursor.at - start.at); next(this->cursor))
     {
     }
-    if (l->at.c > start.c)
+    if (this->cursor.at > start.at)
     {
-        return emit(l, start, TOK_IDENT);
+        return emit(*this, start, Tt::identifier);
     }
 
-    if (is_digit(*l->at.c))
+    if (is_digit(*this->cursor.at))
     {
-        next(&l->at);
-        if (*l->at.c == 'x')
+        next(this->cursor);
+        if (*this->cursor.at == 'x')
         {
-            next(&l->at);
+            next(this->cursor);
         }
 
-        for (; is_hex_digit(*l->at.c); next(&l->at))
+        for (; is_hex_digit(*this->cursor.at); next(this->cursor))
         {
         }
     }
-    if (l->at.c > start.c)
+    if (this->cursor.at > start.at)
     {
-        return emit(l, start, TOK_NUM_LIT);
+        return emit(*this, start, Tt::numerical_literal);
     }
 
-    if (*l->at.c == '\0')
+    if (*this->cursor.at == '\0')
     {
-        return emit(l, start, TOK_EOF);
+        return emit(*this, start, Tt::eof);
     }
 
-    printf("Lexer error at %d:%d: unable to parse token.\n", l->at.line, l->at.line_offset);
-    next(&l->at);
+    std::cout << std::format("Lexer error at {}:{}: unable to parse token", this->cursor.line, this->cursor.line_offset)
+              << std::endl;
+    next(this->cursor);
 
-    return emit(l, start, TOK_EOF);
-}
-
-Token peek_token(const Lexer *l)
-{
-    auto temp = *l;
-    auto token = next_token(&temp);
-
-    return token;
-}
-
-void reset(Lexer *l, Token token)
-{
-    // l->start = token.pos;
-    l->at    = token.pos;
+    return emit(*this, start, Tt::eof);
 }

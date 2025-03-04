@@ -23,13 +23,13 @@ void test_codegen(std::string_view source, BytecodeWriter *mock)
     }
 }
 
-void get_all_allocations(AstBlock *block, std::unordered_map<std::string_view, AstDecl *> *all_decls)
+void get_all_allocations(AstBlock *block, std::unordered_map<std::string_view, AstDeclaration *> *all_decls)
 {
     for (auto statement : block->statements)
     {
-        if (auto decl = ast_cast<AstDecl>(statement))
+        if (auto decl = ast_cast<AstDeclaration>(statement))
         {
-            auto [it, ok] = all_decls->emplace(text_of(&decl->ident), decl);
+            auto [it, ok] = all_decls->emplace(decl->identifier.text(), decl);
             REQUIRE(ok);
             continue;
         }
@@ -50,16 +50,16 @@ void require_allocation(
     REQUIRE(parse_program(source, &program));
 
     REQUIRE(program.block.statements.size() == 1);
-    auto proc_decl = ast_cast<AstDecl>(program.block.statements.front());
+    auto proc_decl = ast_cast<AstDeclaration>(program.block.statements.front());
     REQUIRE(proc_decl != nullptr);
-    auto proc = ast_cast<AstProc>(proc_decl->init_expr);
+    auto proc = ast_cast<AstProcedure>(proc_decl->init_expression);
     REQUIRE(proc != nullptr);
 
     // NOTE: We need to invoke the codegen here because it allocates the variables
     BytecodeWriter w;
     REQUIRE(generate_code(proc, &w));
 
-    std::unordered_map<std::string_view, AstDecl *> all_decls;
+    std::unordered_map<std::string_view, AstDeclaration *> all_decls;
     get_all_allocations(&proc->body, &all_decls);
 
     REQUIRE(all_decls.size() == expected_variable_locations.size());

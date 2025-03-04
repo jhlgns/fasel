@@ -1,55 +1,77 @@
 #pragma once
 
+#include "basics.h"
 #include "lex.h"
 #include <vector>
 
-enum AstKind
+enum class AstKind
 {
-    AST_ARG,
-    AST_BIN_OP,
-    AST_BLOCK,
-    AST_DECL,
-    AST_IDENT,
-    AST_IF,
-    AST_LITERAL,
-    AST_PROC,
-    AST_PROC_CALL,
-    AST_PROC_SIGNATURE,
-    AST_PROGRAM,
-    AST_RETURN,
+    binary_operator,
+    block,
+    declaration,
+    identifier,
+    if_branch,
+    literal,
+    procedure,
+    procedure_call,
+    procedure_signature,
+    program,
+    return_statement,
+    simple_type,
 };
 
 inline const char *to_string(AstKind kind)
 {
     switch (kind)
     {
-        case AST_ARG:            return "AST_ARG";
-        case AST_BIN_OP:         return "AST_BIN_OP";
-        case AST_BLOCK:          return "AST_BLOCK";
-        case AST_DECL:           return "AST_DECL";
-        case AST_IDENT:          return "AST_IDENT";
-        case AST_IF:             return "AST_IF";
-        case AST_LITERAL:        return "AST_LITERAL";
-        case AST_PROC:           return "AST_PROC";
-        case AST_PROC_CALL:      return "AST_PROC_CALL";
-        case AST_PROC_SIGNATURE: return "AST_PROC_SIGNATURE";
-        case AST_PROGRAM:        return "AST_PROGRAM";
-        case AST_RETURN:         return "AST_RETURN";
+        case AstKind::binary_operator:     return "binary_operator";
+        case AstKind::block:               return "block";
+        case AstKind::declaration:         return "declaration";
+        case AstKind::identifier:          return "identifier";
+        case AstKind::if_branch:           return "if_branch";
+        case AstKind::literal:             return "literal";
+        case AstKind::procedure:           return "procedure";
+        case AstKind::procedure_call:      return "procedure_call";
+        case AstKind::procedure_signature: return "procedure_signature";
+        case AstKind::program:             return "program";
+        case AstKind::return_statement:    return "return_statement";
+        case AstKind::simple_type:         return "simple_type";
     }
 
     assert(false);
 }
 
+enum class LiteralType
+{
+    none,
+    integer,
+    real,
+    string,
+};
+
 struct AstNode
 {
-    AstNode()          = delete;
+    AstNode() = delete;
+
     virtual ~AstNode() = default;
+
     explicit AstNode(AstKind kind)
         : kind{kind}
     {
     }
 
     AstKind kind{};
+};
+
+template<AstKind the_kind>
+struct AstHelper : AstNode
+{
+    constexpr static AstKind kind = the_kind;
+
+    AstHelper()
+        : AstNode(kind)
+    {
+    }
 };
 
 template<typename TNode>
@@ -68,96 +90,45 @@ TNode *ast_cast(AstNode *node)
     return static_cast<TNode *>(node);
 }
 
-struct AstDecl : AstNode
+struct AstSimpleType : AstHelper<AstKind::simple_type>
 {
-    constexpr static AstKind kind = AST_DECL;
+    Token identifier;  // TODO: Pointers, arrays, ...
+};
 
-    AstDecl()
-        : AstNode(AST_DECL)
-    {
-    }
-
-    Token ident{};
-    AstNode *init_expr{};
+struct AstDeclaration : AstHelper<AstKind::declaration>
+{
+    Token identifier{};
+    AstNode *type;
+    AstNode *init_expression{};
 
     // Compiler information
-
     bool is_proc_arg{};
-    struct AstProc *enclosing_proc{};
+    struct AstProcedure *enclosing_proc{};
     int64_t address{};  // Global declaration: address inside the program
                         // Local declaration (procedure): offset from procedure stack base
 };
 
-struct AstBinOp : AstNode
+struct AstBinaryOperator : AstHelper<AstKind::binary_operator>
 {
-    constexpr static AstKind kind = AST_BIN_OP;
-
-    AstBinOp()
-        : AstNode(AST_BIN_OP)
-    {
-    }
-
+    TokenType type{};
     AstNode *lhs{};
     AstNode *rhs{};
-    TokenType type{};
 };
 
-struct AstArg : AstNode
+struct AstLiteral : public AstHelper<AstKind::literal>
 {
-    constexpr static AstKind kind = AST_ARG;
-
-    AstArg()
-        : AstNode(AST_ARG)
-    {
-    }
-
-    Token ident{};
-    Token type{};
-};
-
-enum AstLiteralType
-{
-    LIT_NONE,
-    LIT_INT,
-    LIT_FLOAT,
-    LIT_STRING,
-};
-
-struct AstLiteral : public AstNode
-{
-    constexpr static AstKind kind = AST_LITERAL;
-
-    AstLiteral()
-        : AstNode(AST_LITERAL)
-    {
-    }
-
     Token token{};
-    AstLiteralType type{};
+    LiteralType type{};
     int64_t int_value{};
 };
 
-struct AstProcSignature : public AstNode
+struct AstProcedureSignature : public AstHelper<AstKind::procedure_signature>
 {
-    constexpr static AstKind kind = AST_PROC_SIGNATURE;
-
-    AstProcSignature()
-        : AstNode(AST_PROC_SIGNATURE)
-    {
-    }
-
-    std::vector<AstArg> arguments{};
+    std::vector<AstDeclaration> arguments{};
 };
 
-struct AstBlock : public AstNode
+struct AstBlock : public AstHelper<AstKind::block>
 {
-    constexpr static AstKind kind = AST_BLOCK;
-
-    AstBlock()
-        : AstNode(AST_BLOCK)
-    {
-    }
-
     bool is_proc_body{};
     std::vector<AstNode *> statements{};
 
@@ -169,13 +140,13 @@ struct AstBlock : public AstNode
 
     bool is_global() const { return this->parent_block == nullptr; }
 
-    AstDecl *find_decl(std::string_view name)
+    inline AstDeclaration *find_declaration(std::string_view name)
     {
         for (auto statement : this->statements)
         {
-            if (auto decl = ast_cast<AstDecl>(statement))
+            if (auto decl = ast_cast<AstDeclaration>(statement))
             {
-                if (text_of(&decl->ident) == name)
+                if (decl->identifier.text() == name)
                 {
                     return decl;
                 }
@@ -184,87 +155,140 @@ struct AstBlock : public AstNode
 
         if (this->parent_block != nullptr)
         {
-            return this->parent_block->find_decl(name);
+            return this->parent_block->find_declaration(name);
         }
 
         return nullptr;
     }
 };
 
-struct AstIf : public AstNode
+struct AstIf : public AstHelper<AstKind::if_branch>
 {
-    constexpr static AstKind kind = AST_IF;
-
-    AstIf()
-        : AstNode(AST_IF)
-    {
-    }
-
     AstNode *condition{};
     AstBlock then_block{};
     AstBlock else_block{};
 };
 
-struct AstReturn : public AstNode
+struct AstReturn : public AstHelper<AstKind::return_statement>
 {
-    constexpr static AstKind kind = AST_RETURN;
-
-    AstReturn()
-        : AstNode(AST_RETURN)
-    {
-    }
-
-    AstNode *expr{};
+    AstNode *expression{};
 };
 
-struct AstIdent : public AstNode
+struct AstIdentifier : public AstHelper<AstKind::identifier>
 {
-    constexpr static AstKind kind = AST_IDENT;
-
-    AstIdent()
-        : AstNode(AST_IDENT)
-    {
-    }
-
-    Token ident{};
+    Token identifier{};
 };
 
-struct AstProc : public AstNode
+struct AstProcedure : public AstHelper<AstKind::procedure>
 {
-    constexpr static AstKind kind = AST_PROC;
-
-    AstProc()
-        : AstNode(AST_PROC)
-    {
-    }
-
-    AstProcSignature signature{};
+    AstProcedureSignature signature{};
     AstBlock body{};
 };
 
-struct AstProcCall : public AstNode
+struct AstProcedureCall : public AstHelper<AstKind::procedure_call>
 {
-    constexpr static AstKind kind = AST_PROC_CALL;
-
-    AstProcCall()
-        : AstNode(AST_PROC_CALL)
-    {
-    }
-
     AstNode *proc{};
     std::vector<AstNode *> arguments{};
 };
 
-struct AstProgram : public AstNode
+struct AstProgram : public AstHelper<AstKind::program>
 {
-    constexpr static AstKind kind = AST_PROGRAM;
+    AstBlock block{};
+};
 
-    AstProgram()
-        : AstNode(AST_PROGRAM)
+template<typename F>
+void visit(AstNode *node, const F &f)
+{
+    if (node == nullptr)
     {
+        return;
     }
 
-    AstBlock block{};  // TODO: Just make this an array of AstDecls
-};
+    f(node);
+
+    if (auto bin_op = ast_cast<AstBinaryOperator>(node))
+    {
+        visit(bin_op->lhs, f);
+        visit(bin_op->rhs, f);
+        return;
+    }
+
+    if (auto block = ast_cast<AstBlock>(node))
+    {
+        for (auto statement : block->statements)
+        {
+            visit(statement, f);
+        }
+
+        return;
+    }
+
+    if (auto decl = ast_cast<AstDeclaration>(node))
+    {
+        visit(decl->init_expression, f);
+        return;
+    }
+
+    if (auto ident = ast_cast<AstIdentifier>(node))
+    {
+        return;
+    }
+
+    if (auto yf = ast_cast<AstIf>(node))
+    {
+        visit(yf->condition, f);
+        visit(&yf->then_block, f);
+        visit(&yf->else_block, f);
+        return;
+    }
+
+    if (auto literal = ast_cast<AstLiteral>(node))
+    {
+        return;
+    }
+
+    if (auto proc = ast_cast<AstProcedure>(node))
+    {
+        visit(&proc->signature, f);
+        visit(&proc->body, f);
+        return;
+    }
+
+    if (auto call = ast_cast<AstProcedureCall>(node))
+    {
+        visit(call->proc, f);
+
+        for (auto arg : call->arguments)
+        {
+            visit(arg, f);
+        }
+
+        return;
+    }
+
+    if (auto signature = ast_cast<AstProcedureSignature>(node))
+    {
+        for (auto arg : signature->arguments)
+        {
+            visit(&arg, f);
+        }
+
+        return;
+    }
+
+    if (auto program = ast_cast<AstProgram>(node))
+    {
+        visit(&program->block, f);
+        return;
+    }
+
+    if (auto retyrn = ast_cast<AstReturn>(node))
+    {
+        visit(retyrn->expression, f);
+        return;
+    }
+
+    UNREACHED;
+}
 
 bool parse_program(std::string_view source, AstProgram *prog);

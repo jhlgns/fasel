@@ -1,7 +1,7 @@
 #pragma once
 
-#include <utility>
 #include <iostream>
+#include <utility>
 
 template<typename F>
 struct ScopeExit
@@ -28,7 +28,14 @@ ScopeExit<F> operator+(DEFER_TAG, F &&f)
 #define DEFER_2(x, y) DEFER_1(x, y)
 #define defer auto DEFER_2(ScopeExit, __LINE__) = DEFER_TAG{} + [&]()
 
-#define FAIL(message)                      \
+#define UNREACHED                                            \
+    do                                                       \
+    {                                                        \
+        std::cout << "UNREACHED macro reached" << std::endl; \
+        std::abort();                                        \
+    } while (false);
+
+#define FATAL(message)                     \
     do                                     \
     {                                      \
         std::cout << message << std::endl; \

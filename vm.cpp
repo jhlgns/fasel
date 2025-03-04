@@ -111,7 +111,7 @@ void load_program(Vm *vm, std::span<uint8_t> bytecode)
 
 void start_proc_call(Vm *vm, struct AstProgram *program, std::string_view proc_name)
 {
-    auto proc_decl = program->block.find_decl(proc_name);
+    auto proc_decl = program->block.find_declaration(proc_name);
     if (proc_decl == nullptr)
     {
         fatal_error(std::format("Procedure '{}' not found", proc_name));

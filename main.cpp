@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "arena.h"
 #include "basics.h"
 #include "compile.h"
 #include "parse.h"
@@ -12,8 +11,6 @@
 int main(int argc, char **argv)
 {
     printf("This is the Janguage compiler.\n");
-
-    init_arena();
 
     if (argc != 2)
     {
@@ -51,11 +48,7 @@ int main(int argc, char **argv)
     {
     }
 
-    Lexer l{
-        .source = source,
-        // .start  = {.c = source},
-        .at     = {.c = source},
-    };
+    Lexer lexer{source};
 
 #if 0
     printf("Dumping tokens\n");
@@ -68,7 +61,7 @@ int main(int argc, char **argv)
             fwrite(l.start, 1, l.at - l.start, stdout);
         printf("\n");
 
-        if (token.type == TOK_EOF)
+        if (token.type == Tt::EOF)
         {
             break;
         }
@@ -82,9 +75,7 @@ int main(int argc, char **argv)
 
     /* printf("Program:\n%s\n", dump_node(0, &program).data()); */
 
-    BytecodeWriter w{
-        .current_block = &program.block,
-    };
+    BytecodeWriter w{};
     if (generate_code(&program.block, &w) == false)
     {
         return 1;

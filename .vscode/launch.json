@@ -20,7 +20,8 @@
             "name": "Debug tests",
             "program": "${workspaceFolder}/build/tests",
             // "args": ["Procedure calling with arguments"],
-            "args": ["[string_util]"],
+            // "args": ["[string_util]"],
+            "args": ["[parse]"],
             "cwd": "${workspaceFolder}/build"
         }
     ]

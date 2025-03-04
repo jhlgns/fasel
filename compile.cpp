@@ -9,6 +9,7 @@ std::string BytecodeWriter::disassemble()
 {
     return ::disassemble(std::span{this->bytecode.begin(), this->bytecode.end()});
 }
+
 std::vector<AstBlock *> get_statement_child_blocks(AstNode *node)
 {
     if (auto block = ast_cast<AstBlock>(node))
@@ -16,13 +17,61 @@ std::vector<AstBlock *> get_statement_child_blocks(AstNode *node)
         return {block};
     }
 
-    if (auto if_ = ast_cast<AstIf>(node))
+    if (auto yf = ast_cast<AstIf>(node))
     {
-        return {&if_->then_block, &if_->else_block};
+        return {&yf->then_block, &yf->else_block};
     }
 
-    // TODO: Handle AST_IF, AST_WHILE etc. once they are implemented
+    if (auto proc = ast_cast<AstProcedure>(node))
+    {
+        return {&proc->body};
+    }
+
+    // TODO: Handle AstIf, AstWhile etc. once they are implemented
     return {};
+}
+
+void fix_block_hierarchy(AstBlock *root_block)
+{
+    // TODO: We need a way to break out of the recursion
+    visit(
+        root_block,
+        [root_block](AstNode *node)
+        {
+            if (auto block = ast_cast<AstBlock>(node))
+            {
+                if (block != root_block)
+                {
+                    block->parent_block = root_block;
+                    fix_block_hierarchy(block);
+                }
+            }
+        });
+    /*
+
+    program.block {
+        decl.init {
+            proc.body {
+               if.then_block {
+               }
+            }
+        }
+    }
+
+    */
+
+    // TODO
+
+    for (auto statement : root_block->statements)
+    {
+        auto child_blocks = get_statement_child_blocks(statement);
+        for (auto child_block : child_blocks)
+        {
+            child_block->parent_block = root_block;
+
+            fix_block_hierarchy(child_block);
+        }
+    }
 }
 
 void allocate_locals(AstBlock *block)
@@ -32,7 +81,7 @@ void allocate_locals(AstBlock *block)
 
     for (auto statement : block->statements)
     {
-        if (auto decl = ast_cast<AstDecl>(statement))
+        if (auto decl = ast_cast<AstDeclaration>(statement))
         {
             auto size_of_decl = 8;  // TODO
             decl->address     = block->offset_from_parent_block + block->size;
@@ -123,7 +172,8 @@ void compile_error(BytecodeWriter *w, std::string_view message)
 
 bool is_expression(AstKind kind)
 {
-    return kind == AST_BIN_OP || kind == AST_IDENT || kind == AST_LITERAL || kind == AST_PROC_CALL;
+    return kind == AstKind::binary_operator || kind == AstKind::identifier || kind == AstKind::literal ||
+           kind == AstKind::procedure_call;
 }
 
 [[nodiscard]] bool generate_code(AstNode *node, BytecodeWriter *w);
@@ -140,9 +190,9 @@ bool is_expression(AstKind kind)
 
 [[nodiscard]] bool generate_code(AstNode *node, BytecodeWriter *w)
 {
-    if (auto bin_op = ast_cast<AstBinOp>(node))
+    if (auto bin_op = ast_cast<AstBinaryOperator>(node))
     {
-        if (bin_op->type == TOK_AND)
+        if (bin_op->type == Tt::logical_and)
         {
             if (generate_expr(bin_op->lhs, w) == false)
             {
@@ -180,7 +230,7 @@ bool is_expression(AstKind kind)
             return true;
         }
 
-        if (bin_op->type == TOK_OR)
+        if (bin_op->type == Tt::logical_or)
         {
             if (generate_expr(bin_op->lhs, w) == false)
             {
@@ -225,24 +275,24 @@ bool is_expression(AstKind kind)
 
         switch (bin_op->type)
         {
-            case TOK_ASTERISK: write_op(MUL, w); break;
-            case TOK_SLASH:    write_op(DIV, w); break;
-            case TOK_MOD:      write_op(MOD, w); break;
-            case TOK_PLUS:     write_op(ADD, w); break;
-            case TOK_MINUS:    write_op(SUB, w); break;
+            case Tt::asterisk: write_op(MUL, w); break;
+            case Tt::slash:    write_op(DIV, w); break;
+            case Tt::mod:      write_op(MOD, w); break;
+            case Tt::plus:     write_op(ADD, w); break;
+            case Tt::minus:    write_op(SUB, w); break;
 
-            case TOK_BIT_AND: write_op(BITAND, w); break;
-            case TOK_BIT_OR:  write_op(BITOR, w); break;
-            case TOK_BIT_XOR: write_op(BITXOR, w); break;
+            case Tt::bit_and: write_op(BITAND, w); break;
+            case Tt::bit_or:  write_op(BITOR, w); break;
+            case Tt::bit_xor: write_op(BITXOR, w); break;
 
-            case TOK_LEFTSHIFT:  write_op(LSH, w); break;
-            case TOK_RIGHTSHIFT: write_op(RSH, w); break;
-            case TOK_EQ:         write_op(CMPEQ, w); break;
-            case TOK_NE:         write_op(CMPNE, w); break;
-            case TOK_GE:         write_op(CMPGE, w); break;
-            case TOK_GT:         write_op(CMPGT, w); break;
-            case TOK_LE:         write_op(CMPLE, w); break;
-            case TOK_LT:         write_op(CMPLT, w); break;
+            case Tt::left_shift:            write_op(LSH, w); break;
+            case Tt::right_shift:           write_op(RSH, w); break;
+            case Tt::equal:                 write_op(CMPEQ, w); break;
+            case Tt::inequal:               write_op(CMPNE, w); break;
+            case Tt::greater_than_or_equal: write_op(CMPGE, w); break;
+            case Tt::greater_than:          write_op(CMPGT, w); break;
+            case Tt::less_than_or_equal:    write_op(CMPLE, w); break;
+            case Tt::less_than:             write_op(CMPLT, w); break;
 
             default: assert(false); break;
         }
@@ -250,12 +300,12 @@ bool is_expression(AstKind kind)
         return true;
     }
 
-    if (auto ident = ast_cast<AstIdent>(node))
+    if (auto ident = ast_cast<AstIdentifier>(node))
     {
-        auto decl = w->current_block->find_decl(text_of(&ident->ident));
+        auto decl = w->current_block->find_declaration(ident->identifier.text());
         if (decl == nullptr)
         {
-            compile_error(w, std::format("Declaration of {} not found", text_of(&ident->ident)));
+            compile_error(w, std::format("Declaration of {} not found", ident->identifier.text()));
             return false;
         }
 
@@ -289,7 +339,7 @@ bool is_expression(AstKind kind)
                 return false;
             }
 
-            if (got_return == false && statement->kind == AST_RETURN)
+            if (got_return == false && statement->kind == AstKind::return_statement)
             {
                 got_return = true;
             }
@@ -305,7 +355,7 @@ bool is_expression(AstKind kind)
         return true;
     }
 
-    if (auto decl = ast_cast<AstDecl>(node))
+    if (auto decl = ast_cast<AstDeclaration>(node))
     {
         assert(decl->enclosing_proc == nullptr);
         decl->enclosing_proc = w->current_proc;
@@ -314,14 +364,14 @@ bool is_expression(AstKind kind)
         {
             decl->address = w->bytecode.size();
 
-            if (decl->init_expr != nullptr && generate_code(decl->init_expr, w) == false)
+            if (decl->init_expression != nullptr && generate_code(decl->init_expression, w) == false)
             {
                 return false;
             }
         }
-        else if (decl->init_expr != nullptr)
+        else if (decl->init_expression != nullptr)
         {
-            if (generate_expr(decl->init_expr, w) == false)
+            if (generate_expr(decl->init_expression, w) == false)
             {
                 return false;
             }
@@ -335,12 +385,12 @@ bool is_expression(AstKind kind)
 
     if (auto literal = ast_cast<AstLiteral>(node))
     {
-        assert(literal->type == LIT_INT);  // TODO
+        assert(literal->type == LiteralType::integer);  // TODO
         write_op_64(PUSHC, literal->int_value, w);
         return true;
     }
 
-    if (auto proc_call = ast_cast<AstProcCall>(node))
+    if (auto proc_call = ast_cast<AstProcedureCall>(node))
     {
         for (auto i = 0; i < proc_call->arguments.size(); ++i)
         {
@@ -361,7 +411,7 @@ bool is_expression(AstKind kind)
         return true;
     }
 
-    if (auto proc = ast_cast<AstProc>(node))
+    if (auto proc = ast_cast<AstProcedure>(node))
     {
         // TODO: Pop the arguments TODO: No, why, they would just get pushed again either way, right? But their
         // addresses must be set.
@@ -373,18 +423,18 @@ bool is_expression(AstKind kind)
             w->current_proc = prev_proc;
         };
 
-        std::vector<AstDecl *> arg_decls;
+        std::vector<AstDeclaration *> arg_decls;
         for (auto arg : proc->signature.arguments)
         {
-            if (proc->body.find_decl(text_of(&arg.ident)) != nullptr)
+            if (proc->body.find_declaration(arg.identifier.text()) != nullptr)
             {
                 compile_error(w, "TODO");
                 return false;
             }
 
             // TODO Copy type
-            auto decl         = new AstDecl{};
-            decl->ident       = arg.ident;
+            auto decl         = new AstDeclaration{};
+            decl->identifier  = arg.identifier;
             decl->is_proc_arg = true;
             // decl->enclosing_proc = proc;
 
@@ -403,9 +453,11 @@ bool is_expression(AstKind kind)
 
     if (auto program = ast_cast<AstProgram>(node))
     {
+        fix_block_hierarchy(&program->block);
+
         for (auto node : program->block.statements)
         {
-            if (node->kind != AST_DECL)
+            if (node->kind != AstKind::declaration)
             {
                 compile_error(w, "Expected declaration");
                 return false;
@@ -417,9 +469,9 @@ bool is_expression(AstKind kind)
         return true;
     }
 
-    if (auto if_ = ast_cast<AstIf>(node))
+    if (auto yf = ast_cast<AstIf>(node))
     {
-        if (generate_expr(if_->condition, w) == false)
+        if (generate_expr(yf->condition, w) == false)
         {
             return false;
         }
@@ -427,7 +479,7 @@ bool is_expression(AstKind kind)
         auto jmp0_false_pos = w->pos;
         write_op_64(JMP0, 333, w);
 
-        if (generate_code(&if_->then_block, w) == false)
+        if (generate_code(&yf->then_block, w) == false)
         {
             return false;
         }
@@ -443,9 +495,9 @@ bool is_expression(AstKind kind)
         return true;
     }
 
-    if (auto ret = ast_cast<AstReturn>(node))
+    if (auto retyrn = ast_cast<AstReturn>(node))
     {
-        if (generate_expr(ret->expr, w) == false)
+        if (generate_expr(retyrn->expression, w) == false)
         {
             return false;
         }
@@ -461,6 +513,7 @@ bool is_expression(AstKind kind)
         return true;
     }
 
-    assert(false);
+    UNREACHED;
+
     return false;
 }

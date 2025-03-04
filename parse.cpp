@@ -1,20 +1,21 @@
 #include "parse.h"
-#include "arena.h"
 #include "string_util.hpp"
 #include <charconv>
 #include <format>
 #include <iostream>
 
-// TODO: The parsing functions should return an invalid parser on critical error
-// TODO: eat_identifier() etc. must return a parser. The advance method must take an parser to advance
+// TODO: The parsing functions should return an invalid parser on critical errors so that all parsing is cancelled
 
 struct Parser
 {
+    explicit Parser(const Lexer &lexer)
+        : lexer{lexer}
+    {
+    }
+
     Lexer lexer;
     const char *error_context;
-    // struct AstBlock *current_block;
 
-    // Print out an error message with this context the next time error() is called on this parser
     void arm(const char *context) { this->error_context = context; }
 
     [[nodiscard]] Parser quiet()
@@ -33,19 +34,32 @@ struct Parser
 
         auto current_token = start->peek_token();
 
-        auto line = get_line(start->lexer.source, current_token.pos.c);
+        auto line = get_line(start->lexer.source, current_token.pos.at);
 
         auto message = std::format(
             "Parser error at {}:{}\n{}\n{}",
-            start->lexer.at.line,
-            start->lexer.at.line_offset,
+            start->lexer.cursor.line,
+            start->lexer.cursor.line_offset,
             line,
             error);
 
         std::cout << message << std::endl;
     }
 
-    Parser expect_token(TokenType type, Token *token) const
+    Token peek_token() const { return this->lexer.peek_token(); }
+
+    Token next_token()
+    {
+        auto token = this->lexer.next_token();
+        while (token.type == Tt::single_line_comment)
+        {
+            token = this->lexer.next_token();
+        }
+
+        return token;
+    }
+
+    Parser parse_token(TokenType type, Token *token) const
     {
         auto start = *this;
         auto p     = *this;
@@ -53,10 +67,7 @@ struct Parser
         auto t = p.next_token();
         if (t.type != type)
         {
-            this->error(
-                &start,
-                std::format("Expected {}, got {} ({})", to_string(type), to_string(t.type), text_of(&t)));
-
+            this->error(&start, std::format("Expected {}, got {} ({})", to_string(type), to_string(t.type), t.text()));
             return start;
         }
 
@@ -68,42 +79,28 @@ struct Parser
         return p;
     }
 
-    Token peek_token() const
-    {
-        auto token = ::peek_token(&this->lexer);
-        return token;
-    }
+    Parser parse_token(TokenType type) const { return this->parse_token(type, nullptr); }
 
-    Token next_token()
-    {
-        auto token = ::next_token(&this->lexer);
-        return token;
-    }
-
-    Parser parse_token(TokenType type) { return this->expect_token(type, nullptr); }
-
-    Parser parse_keyword(const char *kw) const
+    Parser parse_keyword(std::string_view keyword) const
     {
         auto start = *this;
         auto p     = *this;
 
         auto t = p.next_token();
-        if (t.type != TOK_KEYWORD)
+        if (t.type != Tt::keyword)
         {
-            p.error(&start, std::format("Expected keyword '{}', got '{}'", kw, to_string(t.type)));
-
+            this->error(&start, std::format("Expected keyword '{}', got '{}'", keyword, to_string(t.type)));
             return start;
         }
 
-        auto len = strlen(kw);
+        auto len = keyword.size();
         if (t.len < len)
         {
             len = t.len;
         }
-        if (strncmp(t.pos.c, kw, len) != 0)
+        if (strncmp(t.pos.at, keyword.data(), len) != 0)
         {
-            p.error(&start, std::format("Expected keyword '{}', got '{}'", kw, to_string(t.type)));
-
+            p.error(&start, std::format("Expected keyword '{}', got '{}'", keyword, to_string(t.type)));
             return start;
         }
 
@@ -112,7 +109,7 @@ struct Parser
 
     bool advance(const Parser &parsed)
     {
-        if (parsed.lexer.at.c <= this->lexer.at.c)
+        if (parsed.lexer.cursor.at <= this->lexer.cursor.at)
         {
             return false;
         }
@@ -126,17 +123,17 @@ struct Parser
 };
 
 Parser parse_expr(Parser p, AstNode **out_expr);
-Parser parse_decl(Parser p, AstDecl *out_decl);
+Parser parse_decl(Parser p, AstDeclaration *out_decl);
 Parser parse_block(Parser p, AstBlock *out_block);
 
 Parser parse_statement(Parser p, AstNode **out_statement)
 {
     auto start = p;
 
-    AstDecl decl{};
+    AstDeclaration decl{};
     if (p >>= parse_decl(p.quiet(), &decl))
     {
-        *out_statement = new AstDecl{std::move(decl)};
+        *out_statement = new AstDeclaration{std::move(decl)};
         return p;
     }
 
@@ -144,33 +141,29 @@ Parser parse_statement(Parser p, AstNode **out_statement)
     {
         p.arm("parsing if statement");
 
-        // TODO
-        AstIf if_{};
-        // auto if_ = new AstIf{};
-        // if_->then_block.parent_block = p.current_block;
-        // if_->else_block.parent_block = p.current_block;
+        AstIf yf{};
 
-        if (!(p >>= parse_expr(p, &if_.condition)))
+        if (!(p >>= parse_expr(p, &yf.condition)))
         {
             return start;
         }
 
         // TODO: Allow simple statements instead of blocks for then and else
 
-        if (!(p >>= parse_block(p, &if_.then_block)))
+        if (!(p >>= parse_block(p, &yf.then_block)))
         {
             return start;
         }
 
         if (p >>= p.quiet().parse_keyword("else"))
         {
-            if (!(p >>= parse_block(p, &if_.else_block)))
+            if (!(p >>= parse_block(p, &yf.else_block)))
             {
                 return start;
             }
         }
 
-        *out_statement = new AstIf{std::move(if_)};
+        *out_statement = new AstIf{std::move(yf)};
         return p;
     }
 
@@ -178,13 +171,13 @@ Parser parse_statement(Parser p, AstNode **out_statement)
     {
         p.arm("parsing return statement");
 
-        AstReturn ret{};
-        if (!(p >>= parse_expr(p, &ret.expr)))
+        AstReturn retyrn{};
+        if (!(p >>= parse_expr(p, &retyrn.expression)))
         {
             return start;
         }
 
-        *out_statement = new AstReturn{std::move(ret)};
+        *out_statement = new AstReturn{std::move(retyrn)};
         return p;
     }
 
@@ -218,7 +211,7 @@ Parser parse_block(Parser p, AstBlock *out_block)
         // p.current_block = out_block->parent_block;
     // };
 
-    if (!(p >>= p.parse_token(TOK_OPENBRACE)))
+    if (!(p >>= p.parse_token(Tt::brace_open)))
     {
         return start;
     }
@@ -227,12 +220,12 @@ Parser parse_block(Parser p, AstBlock *out_block)
 
     while (true)
     {
-        if (p >>= p.quiet().parse_token(TOK_CLOSEBRACE))
+        if (p >>= p.quiet().parse_token(Tt::brace_close))
         {
             return p;
         }
 
-        AstNode *stmt = nullptr;
+        AstNode *stmt{};
         if (!(p >>= parse_statement(p, &stmt)))
         {
             return start;
@@ -244,7 +237,7 @@ Parser parse_block(Parser p, AstBlock *out_block)
     return p;
 }
 
-Parser parse_proc(Parser p, AstProc *out_proc)
+Parser parse_proc(Parser p, AstProcedure *out_proc)
 {
     auto start = p;
 
@@ -255,46 +248,40 @@ Parser parse_proc(Parser p, AstProc *out_proc)
 
     p.arm("parsing procedure");
 
-    if (!(p >>= p.parse_token(TOK_OPENPAREN)))
+    if (!(p >>= p.parse_token(Tt::parenthesis_open)))
     {
         return start;
     }
 
+    auto require_close = false;
     while (true)
     {
-        auto done = false;
-        switch (p.peek_token().type)
+        if (require_close)
         {
-            case TOK_COMMA: // TODO: Allows for ',' at beginning of parameter list
-                p.next_token();
-                break;
+            if (!(p >>= p.parse_token(Tt::parenthesis_close)))
+            {
+                return start;
+            }
 
-            case TOK_CLOSEPAREN:
-                p.next_token();
-                done = true;
-                break;
-
-            default: break;
+            break;
         }
-
-        if (done)
+        else if (p >>= p.quiet().parse_token(Tt::parenthesis_close))
         {
             break;
         }
 
-        // TODO: Parse AstDecl here and remove AstArg completely
-        AstArg arg{};
-        if (!(p >>= p.expect_token(TOK_IDENT, &arg.ident)))
+        AstDeclaration arg{};
+        if (!(p >>= parse_decl(p, &arg)))
         {
             return start;
         }
 
-        if (!(p >>= p.expect_token(TOK_IDENT, &arg.type)))
-        {
-            return start;
-        }
+        out_proc->signature.arguments.push_back(std::move(arg));
 
-        out_proc->signature.arguments.push_back(arg);
+        if (!(p >>= p.quiet().parse_token(Tt::comma)))
+        {
+            require_close = true;
+        }
     }
 
     out_proc->body.is_proc_body = true;
@@ -311,22 +298,22 @@ Parser parse_primary_expr(Parser p, AstNode **out_primary_expr)
     auto start = p;
 
     Token t;
-    if (p >>= p.quiet().expect_token(TOK_NUM_LIT, &t))
+    if (p >>= p.quiet().parse_token(Tt::numerical_literal, &t))
     {
         p.arm("parsing number literal");
 
         AstLiteral literal{};
         literal.token = t;
-        literal.type  = LIT_INT;
+        literal.type  = LiteralType::integer;
 
         std::from_chars_result result;
-        if (*t.pos.c == '0' && *(t.pos.c + 1) == 'x')
+        if (t.pos.at[0] == '0' && t.pos.at[1] == 'x')
         {
-            result = std::from_chars(t.pos.c + 2, t.pos.c + t.len, literal.int_value, 16);
+            result = std::from_chars(t.pos.at + 2, t.pos.at + t.len, literal.int_value, 16);
         }
         else
         {
-            result = std::from_chars(t.pos.c, t.pos.c + t.len, literal.int_value);
+            result = std::from_chars(t.pos.at, t.pos.at + t.len, literal.int_value);
         }
 
         if (result.ec != std::errc{})
@@ -335,7 +322,7 @@ Parser parse_primary_expr(Parser p, AstNode **out_primary_expr)
             return start;
         }
 
-        if (result.ptr != t.pos.c + t.len)
+        if (result.ptr != t.pos.at + t.len)
         {
             p.error(&start, "Failed to parse integer literal");
             return start;
@@ -345,18 +332,18 @@ Parser parse_primary_expr(Parser p, AstNode **out_primary_expr)
         return p;
     }
 
-    if (p >>= p.quiet().expect_token(TOK_IDENT, &t))
+    if (p >>= p.quiet().parse_token(Tt::identifier, &t))
     {
-        auto ident        = new AstIdent{};
-        ident->ident      = t;
+        auto ident        = new AstIdentifier{};
+        ident->identifier = t;
         *out_primary_expr = ident;
         return p;
     }
 
-    AstProc proc{};
+    AstProcedure proc{};
     if (p >>= parse_proc(p, &proc))
     {
-        *out_primary_expr = new AstProc{std::move(proc)};
+        *out_primary_expr = new AstProcedure{std::move(proc)};
         return p;
     }
 
@@ -369,24 +356,28 @@ Parser parse_suffix_expr(Parser p, AstNode *lhs, AstNode **node)
 {
     auto start = p;
 
-    if (p >>= p.quiet().parse_token(TOK_OPENPAREN))
+    if (p >>= p.quiet().parse_token(Tt::parenthesis_open))
     {
-        p.arm("Parsing procedure call");
+        p.arm("parsing procedure call");
 
-        AstProcCall call{};
+        AstProcedureCall call{};
         call.proc = lhs;
 
-        auto is_end = false;
+        auto require_close = false;
         while (true)
         {
-            if (is_end)
+            if (require_close)
             {
-                if (p >>= p.parse_token(TOK_CLOSEPAREN))
+                if (!(p >>= p.parse_token(Tt::parenthesis_close)))
                 {
-                    break;
+                    return start;
                 }
 
-                return start;
+                break;
+            }
+            else if (p >>= p.quiet().parse_token(Tt::parenthesis_close))
+            {
+                break;
             }
 
             AstNode *argument;
@@ -397,13 +388,13 @@ Parser parse_suffix_expr(Parser p, AstNode *lhs, AstNode **node)
 
             call.arguments.push_back(argument);
 
-            if (!(p >>= p.quiet().parse_token(TOK_COMMA)))
+            if (!(p >>= p.quiet().parse_token(Tt::comma)))
             {
-                is_end = true;
+                require_close = true;
             }
         }
 
-        *node = new AstProcCall{std::move(call)};
+        *node = new AstProcedureCall{std::move(call)};
         return p;
     }
 
@@ -426,7 +417,7 @@ Parser parse_binary_expr(Parser p, AstNode **node, int prev_prec)
     while (true)
     {
         auto op   = p.peek_token();
-        auto prec = binop_prec(op.type);
+        auto prec = binary_operator_precedence(op.type);
 
         if (prec == 0 || prec <= prev_prec)
         {
@@ -443,7 +434,7 @@ Parser parse_binary_expr(Parser p, AstNode **node, int prev_prec)
             return start;
         }
 
-        auto bin_op  = new AstBinOp{};
+        auto bin_op  = new AstBinaryOperator{};
         bin_op->type = op.type;
         bin_op->lhs  = lhs;
         bin_op->rhs  = rhs;
@@ -461,30 +452,45 @@ Parser parse_expr(Parser p, AstNode **node)
     return parse_binary_expr(p, node, -1);
 }
 
-Parser parse_decl(Parser p, AstDecl *decl)
+Parser parse_type(Parser p, AstNode **out_type)
 {
     auto start = p;
 
-    Token ident;
-    if (!(p >>= p.expect_token(TOK_IDENT, &ident)))
+    if (!(p >>= p.parse_token(Tt::identifier)))
     {
         return start;
     }
 
-    if (!(p >>= p.parse_token(TOK_DECLASSIGN)))
+    return p;
+}
+
+Parser parse_decl(Parser p, AstDeclaration *decl)
+{
+    auto start = p;
+
+    if (!(p >>= p.parse_token(Tt::identifier, &decl->identifier)))
     {
         return start;
     }
 
-    AstNode *init_expr;
-    if (!(p >>= parse_expr(p, &init_expr)))
+    if (!(p >>= p.parse_token(Tt::colon)))
     {
         return start;
     }
 
-    // decl->block     = p.current_block;
-    decl->ident     = ident;
-    decl->init_expr = init_expr;
+    auto has_type = p >>= parse_type(p.quiet(), &decl->type);
+
+    if (p >>= p.quiet().parse_token(Tt::assign))
+    {
+        if (!(p >>= parse_expr(p, &decl->init_expression)))
+        {
+            return start;
+        }
+    }
+    else if (has_type == false)
+    {
+        p.error(&start, "Declaration without init expression needs a type");
+    }
 
     return p;
 }
@@ -498,9 +504,7 @@ Parser parse_program(Parser p, AstProgram *prog)
 
     while (true)
     {
-        // TODO: Arm???
-
-        auto decl = new AstDecl{};
+        auto decl = new AstDeclaration{};
         if (!(p >>= parse_decl(p, decl)))
         {
             return start;
@@ -508,9 +512,7 @@ Parser parse_program(Parser p, AstProgram *prog)
 
         prog->block.statements.push_back(decl);
 
-        reset_arena();
-
-        if (p.peek_token().type == TOK_EOF)
+        if (p.peek_token().type == Tt::eof)
         {
             return p;
         }
@@ -521,16 +523,12 @@ Parser parse_program(Parser p, AstProgram *prog)
 
 bool parse_program(std::string_view source, AstProgram *prog)
 {
-    Lexer l{
-        .source = source,
-        // .start  = {.c = source.data()},
-        .at = {.c = source.data()},
-    };
-    Parser p{.lexer = l};
+    Lexer lexer{source};
+    Parser p{lexer};
 
     if (!(p >>= parse_program(p, prog)))
     {
-        // std::cout << p.error << std::endl;
+        std::cout << "Compilation failed" << std::endl;
 
         return false;
     }

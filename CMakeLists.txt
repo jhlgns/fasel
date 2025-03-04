@@ -11,10 +11,10 @@ add_compile_options(-std=c++20 -stdlib=libc++)
 add_link_options(-std=c++20 -stdlib=libc++)
 
 set(shared_source_files
-    arena.cpp
     compile.cpp
     disasm.cpp
     lex.cpp
+    memory_pool.cpp
     parse.cpp
     stringify.cpp
     vm.cpp

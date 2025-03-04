@@ -10,7 +10,7 @@ struct BytecodeWriter
     std::vector<uint8_t> bytecode{};
     size_t pos{};  // TODO: The post-fixups do not correct the ASM
     struct AstBlock *current_block{};
-    struct AstProc *current_proc{};
+    struct AstProcedure *current_proc{};
 
     std::string disassemble();
 };
