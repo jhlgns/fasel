@@ -8,7 +8,7 @@ void test_expression(std::string_view expression, int64_t expected_result)
     auto source = std::format("main := proc() {{ return {} }}", expression);
 
     AstProgram program;
-    REQUIRE(parse_program(source, &program));
+    REQUIRE(parse_program(source, program));
 
     BytecodeWriter w;
     REQUIRE(generate_code(&program, &w));
@@ -109,7 +109,7 @@ main := proc() {
     // or do something smarter with addressing relative to RSP.
     // TODO: Add a simple test to verify this
     AstProgram program;
-    REQUIRE(parse_program(source, &program));
+    REQUIRE(parse_program(source, program));
 
     BytecodeWriter w;
     REQUIRE(generate_code(&program, &w));

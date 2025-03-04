@@ -6,7 +6,7 @@
 void test_codegen(std::string_view source, BytecodeWriter *mock)
 {
     AstProgram program;
-    REQUIRE(parse_program(source, &program));
+    REQUIRE(parse_program(source, program));
 
     BytecodeWriter w;
     REQUIRE(generate_code(&program, &w));
@@ -47,7 +47,7 @@ void require_allocation(
     std::unordered_map<std::string_view, int64_t> expected_variable_locations)
 {
     AstProgram program;
-    REQUIRE(parse_program(source, &program));
+    REQUIRE(parse_program(source, program));
 
     REQUIRE(program.block.statements.size() == 1);
     auto proc_decl = ast_cast<AstDeclaration>(program.block.statements.front());

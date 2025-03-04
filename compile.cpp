@@ -156,6 +156,7 @@ int64_t write_op_8(OpCode op, uint8_t value, BytecodeWriter *w)
     return addr;
 }
 
+// TODO: Use varint encoding
 int64_t write_op_64(OpCode op, int64_t value, BytecodeWriter *w)
 {
     auto addr = w->pos;

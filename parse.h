@@ -291,4 +291,4 @@ void visit(AstNode *node, const F &f)
     UNREACHED;
 }
 
-bool parse_program(std::string_view source, AstProgram *prog);
+bool parse_program(std::string_view source, AstProgram &out_program);

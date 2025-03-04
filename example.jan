@@ -30,6 +30,9 @@ main := proc() void {
      // Unary operators are trailing
     d: *i32 = c&
 
+    // Type casting
+    casted := 12.34 to i64
+
     // Array of pointer to array of 2 elements of a procedure pointer type
     // (Imagine doing this with C!)
     array: []*[2]proc(a: i64, f: f32)

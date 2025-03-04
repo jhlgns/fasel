@@ -122,18 +122,18 @@ struct Parser
     bool operator>>=(const Parser &other) { return this->advance(other); }
 };
 
-Parser parse_expr(Parser p, AstNode **out_expr);
-Parser parse_decl(Parser p, AstDeclaration *out_decl);
-Parser parse_block(Parser p, AstBlock *out_block);
+Parser parse_expr(Parser p, AstNode *&out_expr);
+Parser parse_decl(Parser p, AstDeclaration &out_decl);
+Parser parse_block(Parser p, AstBlock &out_block);
 
-Parser parse_statement(Parser p, AstNode **out_statement)
+Parser parse_statement(Parser p, AstNode *&out_statement)
 {
     auto start = p;
 
     AstDeclaration decl{};
-    if (p >>= parse_decl(p.quiet(), &decl))
+    if (p >>= parse_decl(p.quiet(), decl))
     {
-        *out_statement = new AstDeclaration{std::move(decl)};
+        out_statement = new AstDeclaration{std::move(decl)};
         return p;
     }
 
@@ -143,27 +143,27 @@ Parser parse_statement(Parser p, AstNode **out_statement)
 
         AstIf yf{};
 
-        if (!(p >>= parse_expr(p, &yf.condition)))
+        if (!(p >>= parse_expr(p, yf.condition)))
         {
             return start;
         }
 
         // TODO: Allow simple statements instead of blocks for then and else
 
-        if (!(p >>= parse_block(p, &yf.then_block)))
+        if (!(p >>= parse_block(p, yf.then_block)))
         {
             return start;
         }
 
         if (p >>= p.quiet().parse_keyword("else"))
         {
-            if (!(p >>= parse_block(p, &yf.else_block)))
+            if (!(p >>= parse_block(p, yf.else_block)))
             {
                 return start;
             }
         }
 
-        *out_statement = new AstIf{std::move(yf)};
+        out_statement = new AstIf{std::move(yf)};
         return p;
     }
 
@@ -172,26 +172,26 @@ Parser parse_statement(Parser p, AstNode **out_statement)
         p.arm("parsing return statement");
 
         AstReturn retyrn{};
-        if (!(p >>= parse_expr(p, &retyrn.expression)))
+        if (!(p >>= parse_expr(p, retyrn.expression)))
         {
             return start;
         }
 
-        *out_statement = new AstReturn{std::move(retyrn)};
+        out_statement = new AstReturn{std::move(retyrn)};
         return p;
     }
 
     AstNode *expr;
-    if (p >>= parse_expr(p.quiet(), &expr))
+    if (p >>= parse_expr(p.quiet(), expr))
     {
-        *out_statement = expr;
+        out_statement = expr;
         return p;
     }
 
     AstBlock block{};
-    if (p >>= parse_block(p.quiet(), &block))
+    if (p >>= parse_block(p.quiet(), block))
     {
-        *out_statement = new AstBlock{std::move(block)};
+        out_statement = new AstBlock{std::move(block)};
         return p;
     }
 
@@ -200,7 +200,7 @@ Parser parse_statement(Parser p, AstNode **out_statement)
     return start;
 }
 
-Parser parse_block(Parser p, AstBlock *out_block)
+Parser parse_block(Parser p, AstBlock &out_block)
 {
     auto start = p;
 
@@ -225,19 +225,19 @@ Parser parse_block(Parser p, AstBlock *out_block)
             return p;
         }
 
-        AstNode *stmt{};
-        if (!(p >>= parse_statement(p, &stmt)))
+        AstNode *statement{};
+        if (!(p >>= parse_statement(p, statement)))
         {
             return start;
         }
 
-        out_block->statements.push_back(stmt);
+        out_block.statements.push_back(statement);
     }
 
     return p;
 }
 
-Parser parse_proc(Parser p, AstProcedure *out_proc)
+Parser parse_proc(Parser p, AstProcedure &out_proc)
 {
     auto start = p;
 
@@ -271,12 +271,12 @@ Parser parse_proc(Parser p, AstProcedure *out_proc)
         }
 
         AstDeclaration arg{};
-        if (!(p >>= parse_decl(p, &arg)))
+        if (!(p >>= parse_decl(p, arg)))
         {
             return start;
         }
 
-        out_proc->signature.arguments.push_back(std::move(arg));
+        out_proc.signature.arguments.push_back(std::move(arg));
 
         if (!(p >>= p.quiet().parse_token(Tt::comma)))
         {
@@ -284,8 +284,8 @@ Parser parse_proc(Parser p, AstProcedure *out_proc)
         }
     }
 
-    out_proc->body.is_proc_body = true;
-    if (!(p >>= parse_block(p, &out_proc->body)))
+    out_proc.body.is_proc_body = true;
+    if (!(p >>= parse_block(p, out_proc.body)))
     {
         return start;
     }
@@ -293,7 +293,7 @@ Parser parse_proc(Parser p, AstProcedure *out_proc)
     return p;
 }
 
-Parser parse_primary_expr(Parser p, AstNode **out_primary_expr)
+Parser parse_primary_expr(Parser p, AstNode *&out_primary_expr)
 {
     auto start = p;
 
@@ -328,7 +328,7 @@ Parser parse_primary_expr(Parser p, AstNode **out_primary_expr)
             return start;
         }
 
-        *out_primary_expr = new AstLiteral{std::move(literal)};
+        out_primary_expr = new AstLiteral{std::move(literal)};
         return p;
     }
 
@@ -336,14 +336,14 @@ Parser parse_primary_expr(Parser p, AstNode **out_primary_expr)
     {
         auto ident        = new AstIdentifier{};
         ident->identifier = t;
-        *out_primary_expr = ident;
+        out_primary_expr  = ident;
         return p;
     }
 
     AstProcedure proc{};
-    if (p >>= parse_proc(p, &proc))
+    if (p >>= parse_proc(p, proc))
     {
-        *out_primary_expr = new AstProcedure{std::move(proc)};
+        out_primary_expr = new AstProcedure{std::move(proc)};
         return p;
     }
 
@@ -381,7 +381,7 @@ Parser parse_suffix_expr(Parser p, AstNode *lhs, AstNode **node)
             }
 
             AstNode *argument;
-            if (!(p >>= parse_expr(p, &argument)))
+            if (!(p >>= parse_expr(p, argument)))
             {
                 return start;
             }
@@ -403,12 +403,12 @@ Parser parse_suffix_expr(Parser p, AstNode *lhs, AstNode **node)
     return start;
 }
 
-Parser parse_binary_expr(Parser p, AstNode **node, int prev_prec)
+Parser parse_binary_expr(Parser p, AstNode *&out_node, int prev_prec)
 {
     auto start = p;
 
     AstNode *lhs;
-    if (!(p >>= parse_primary_expr(p, &lhs)))
+    if (!(p >>= parse_primary_expr(p, lhs)))
     {
         return start;
     }
@@ -421,7 +421,7 @@ Parser parse_binary_expr(Parser p, AstNode **node, int prev_prec)
 
         if (prec == 0 || prec <= prev_prec)
         {
-            *node = lhs;
+            out_node = lhs;
             return p;
         }
 
@@ -429,7 +429,7 @@ Parser parse_binary_expr(Parser p, AstNode **node, int prev_prec)
         p.arm("parsing binary operator right hand side");
 
         AstNode *rhs;
-        if (!(p >>= parse_binary_expr(p, &rhs, prec)))
+        if (!(p >>= parse_binary_expr(p, rhs, prec)))
         {
             return start;
         }
@@ -442,17 +442,17 @@ Parser parse_binary_expr(Parser p, AstNode **node, int prev_prec)
         lhs = bin_op;
     }
 
-    *node = lhs;
+    out_node = lhs;
 
     return p;
 }
 
-Parser parse_expr(Parser p, AstNode **node)
+Parser parse_expr(Parser p, AstNode *&node)
 {
     return parse_binary_expr(p, node, -1);
 }
 
-Parser parse_type(Parser p, AstNode **out_type)
+Parser parse_type(Parser p, AstNode *&out_type)
 {
     auto start = p;
 
@@ -462,7 +462,7 @@ Parser parse_type(Parser p, AstNode **out_type)
         auto type        = new AstSimpleType{};
         type->identifier = identifier;
 
-        *out_type = type;
+        out_type = type;
 
         return p;
     }
@@ -470,11 +470,11 @@ Parser parse_type(Parser p, AstNode **out_type)
     return start;
 }
 
-Parser parse_decl(Parser p, AstDeclaration *decl)
+Parser parse_decl(Parser p, AstDeclaration &out_decl)
 {
     auto start = p;
 
-    if (!(p >>= p.parse_token(Tt::identifier, &decl->identifier)))
+    if (!(p >>= p.parse_token(Tt::identifier, &out_decl.identifier)))
     {
         return start;
     }
@@ -486,11 +486,11 @@ Parser parse_decl(Parser p, AstDeclaration *decl)
 
     p.arm("parsing declaration");
 
-    auto has_type = p >>= parse_type(p.quiet(), &decl->type);
+    auto has_type = p >>= parse_type(p.quiet(), out_decl.type);
 
     if (p >>= p.quiet().parse_token(Tt::assign))
     {
-        if (!(p >>= parse_expr(p, &decl->init_expression)))
+        if (!(p >>= parse_expr(p, out_decl.init_expression)))
         {
             return start;
         }
@@ -503,7 +503,7 @@ Parser parse_decl(Parser p, AstDeclaration *decl)
     return p;
 }
 
-Parser parse_program(Parser p, AstProgram *prog)
+Parser parse_program(Parser p, AstProgram &out_program)
 {
     auto start = p;
 
@@ -512,13 +512,13 @@ Parser parse_program(Parser p, AstProgram *prog)
 
     while (true)
     {
-        auto decl = new AstDeclaration{};
+        AstDeclaration decl{};
         if (!(p >>= parse_decl(p, decl)))
         {
             return start;
         }
 
-        prog->block.statements.push_back(decl);
+        out_program.block.statements.push_back(new AstDeclaration{decl});
 
         if (p.peek_token().type == Tt::eof)
         {
@@ -529,7 +529,7 @@ Parser parse_program(Parser p, AstProgram *prog)
     return p;
 }
 
-bool parse_program(std::string_view source, AstProgram *prog)
+bool parse_program(std::string_view source, AstProgram &prog)
 {
     Lexer lexer{source};
     Parser p{lexer};

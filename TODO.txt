@@ -1,0 +1,46 @@
+# TODO
+
+## General
+
+[ ] Fix the block hierarchy before compiling
+[ ] Implement procedure stack shift for loading locals while pushing arguments
+[ ] Refactor BytecodeWriter
+[ ] Decouple parsing and code generator tests
+[ ] Idea: instead of `a := 1` declaration notation, use `fin xyz = proc() { }`, `mut x: i32 = 5`
+[ ] Find a model for C interoperability
+
+
+## Expressions & statements
+
+[ ] Unary operators
+[ ] Address-of operator
+[ ] Procedure return types
+[ ] 'for'-loop
+[ ] Struct types
+[ ] Arithmetical assignment operators (+= etc.)
+[ ] Prefix decrement and increment operators
+[ ] Floating point literals
+[ ] Type casting
+[ ] Simple statements for if/else blocks or loops
+[ ] 'defer'-statement
+[ ] Array subscript
+
+
+## Types
+
+[ ] Type checker
+[ ] Boolean types
+[ ] Strings
+[ ] Pointer types
+[ ] Array types
+    [ ] Static
+    [ ] Dynamic
+[ ] Enums - or something like Go is doing
+
+
+## Compilation
+
+[ ] Transform for/while loops etc. to simpler statements to compile them
+[ ] Maybe create a backend that compiles to C code
+[ ] Native function calling
+

@@ -6,15 +6,15 @@
 
 enum class TokenType
 {
-    asterisk, // *
-    slash, // /
-    mod, // %
-    plus, // +
-    minus, // -
-    assign, // =
-    bit_and, // &
-    bit_or, // |
-    bit_xor, // ^
+    asterisk,  // *
+    slash,  // /
+    mod,  // %
+    plus,  // +
+    minus,  // -
+    assign,  // =
+    bit_and,  // &
+    bit_or,  // |
+    bit_xor,  // ^
     left_shift,  // <<
     right_shift,  // >>
     equal,  // ==
@@ -27,18 +27,19 @@ enum class TokenType
     logical_and,  // &&
     logical_or,  // ||
 
-    comma, // ,
-
-    parenthesis_open, // (
-    parenthesis_close, // )
-    brace_open, // {
-    brace_close, // }
-    // declaration_assignment,  // :=
     colon,  // :
+    comma,  // ,
+
+    parenthesis_open,  // (
+    parenthesis_close,  // )
+    brace_open,  // {
+    brace_close,  // }
+
     identifier,
     keyword,
     numerical_literal,
-    single_line_comment, // ...
+
+    single_line_comment,  // ...
     multi_line_comment,  // /* ... */
 
     eof,
@@ -50,21 +51,20 @@ inline const char *to_string(TokenType t)
 {
     switch (t)
     {
-        case Tt::asterisk:          return "asterisk";
-        case Tt::slash:             return "slash";
-        case Tt::mod:               return "mod";
-        case Tt::plus:              return "plus";
-        case Tt::minus:             return "minus";
-        case Tt::assign:            return "assign";
-        case Tt::bit_and:           return "bit_and";
-        case Tt::bit_xor:           return "bit_xor";
-        case Tt::bit_or:            return "bit_or";
-        case Tt::comma:             return "comma";
-        case Tt::parenthesis_open:  return "parenthesis_open";
-        case Tt::parenthesis_close: return "parenthesis_close";
-        case Tt::brace_open:        return "brace_open";
-        case Tt::brace_close:       return "brace_close";
-        // case Tt::declaration_assignment: return "declaration_assignment";
+        case Tt::asterisk:              return "asterisk";
+        case Tt::slash:                 return "slash";
+        case Tt::mod:                   return "mod";
+        case Tt::plus:                  return "plus";
+        case Tt::minus:                 return "minus";
+        case Tt::assign:                return "assign";
+        case Tt::bit_and:               return "bit_and";
+        case Tt::bit_xor:               return "bit_xor";
+        case Tt::bit_or:                return "bit_or";
+        case Tt::comma:                 return "comma";
+        case Tt::parenthesis_open:      return "parenthesis_open";
+        case Tt::parenthesis_close:     return "parenthesis_close";
+        case Tt::brace_open:            return "brace_open";
+        case Tt::brace_close:           return "brace_close";
         case Tt::colon:                 return "colon";
         case Tt::left_shift:            return "left_shift";
         case Tt::right_shift:           return "right_shift";

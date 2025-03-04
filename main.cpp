@@ -68,7 +68,7 @@ int main(int argc, char **argv)
     }
 #else
     AstProgram program{};
-    if (parse_program(source, &program) == false)
+    if (parse_program(source, program) == false)
     {
         return 1;
     }

@@ -251,7 +251,7 @@ namespace assertions
 AstProcedure *parse_program_and_get_main(std::string_view source)
 {
     AstProgram program{};
-    REQUIRE(parse_program(source, &program));
+    REQUIRE(parse_program(source, program));
 
     auto main_decl = program.block.find_declaration("main");
     REQUIRE(main_decl != nullptr);
@@ -269,7 +269,7 @@ void test_integer_literal(std::string_view literal_text, int64_t expected_value)
     AstProgram program;
 
     auto source = std::format("main := proc() {{ a := {} }}", literal_text);
-    REQUIRE(parse_program(source, &program));
+    REQUIRE(parse_program(source, program));
 
     auto main_decl = program.block.find_declaration("main");
     REQUIRE(main_decl != nullptr);
@@ -325,7 +325,7 @@ main := proc() {
 )"};
 
     AstProgram program{};
-    REQUIRE(parse_program(source, &program));
+    REQUIRE(parse_program(source, program));
 
     auto main_decl = program.block.find_declaration("main");
     REQUIRE(main_decl != nullptr);
@@ -522,7 +522,7 @@ main := proc() {
 )"};
 
     AstProgram program;
-    REQUIRE(parse_program(source, &program));
+    REQUIRE(parse_program(source, program));
 
     // TODO
     // std::cout << dump_node(0, &program) << std::endl;
