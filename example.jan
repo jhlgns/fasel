@@ -1,15 +1,43 @@
-f := proc(a int, b int) {
-    return a
+// Single line comment
+
+/*
+Multiline
+comment
+
+/* Nested comment */
+
+*/
+
+
+fib := proc(n i64) i64 {
+    if n == 0 { return 0 }
+    if n == 1 { return 1 }
+
+    return fib(n - 1) + fib(n - 2)
 }
 
-main := proc() {
-    a := 1 + 2 * 3
-    b := 1 * 2 + 3
-    c := 1(f) * x(2) + 3
-    x := 23
-    result := f(1, x)
-    result = result - 1
+main := proc() void {
+    // Declaration
+    a := 1 * 2 + 3 / 4  // Default integer type is i64
 
-    return result
+    // With explicit type
+    b: f32 = fib(30)
+
+    // With explicit type and without init expression
+    c: i32
+
+     // Type notation similar to Golang
+     // Unary operators are trailing
+    d: *i32 = c&
+
+    // Array of pointer to array of 2 elements of a procedure pointer type
+    // (Imagine doing this with C!)
+    array: []*[2]proc(a: i64, f: f32)
+
+    while done! {
+        a <<= 1
+
+        if a > 128  break
+    }
 }
 
