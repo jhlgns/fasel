@@ -458,6 +458,7 @@ main := proc() {
     a: i64
     b: i64 = 2
     c := 3
+    d := proc() {}
 }
 )"};
 
@@ -482,6 +483,11 @@ main := proc() {
                             .identifier      = "c",
                             .type            = as::Null{},
                             .init_expression = as::Literal{.int_value = 3},
+                        },
+                        as::Declaration{
+                            .identifier      = "d",
+                            .type            = as::Null{},
+                            .init_expression = as::Procedure{.signature = as::Nop{}, .body = as::Nop{}},
                         },
                     }},
     }(parse_program_and_get_main(source));
