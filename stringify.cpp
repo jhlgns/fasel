@@ -79,7 +79,7 @@ std::string to_string(int indent_level, AstIf *node)
     result += std::format("{}\n", indent(indent_level + 1, "Then:\n"));
     result += std::format("{}\n", dump_node(indent_level + 2, &node->then_block));
     result += std::format("{}\n", indent(indent_level + 1, "Else:\n"));
-    result += std::format("{}\n", dump_node(indent_level + 2, &node->else_block));
+    result += std::format("{}\n", dump_node(indent_level + 2, node->else_block));
     result += indent(indent_level, std::format(")"));
 
     return result;

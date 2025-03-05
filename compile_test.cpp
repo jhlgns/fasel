@@ -46,7 +46,7 @@ AstIf *make_if(AstNode *condition, AstBlock *then_block, AstBlock *else_block)
     auto result        = new AstIf{};
     result->condition  = condition;
     result->then_block = std::move(*then_block);
-    result->else_block = std::move(*else_block);
+    result->else_block = else_block;
     return result;
 }
 

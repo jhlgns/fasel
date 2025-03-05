@@ -50,7 +50,7 @@ namespace assertions
 
     struct BinaryOperator
     {
-        Assertion<TokenType> type;
+        TokenType type;
         Assertion<AstNode *> lhs;
         Assertion<AstNode *> rhs;
 
@@ -59,7 +59,8 @@ namespace assertions
             auto bin_op = ast_cast<AstBinaryOperator>(node);
             REQUIRE(bin_op != nullptr);
 
-            this->type(bin_op->type);
+            REQUIRE(this->type != Tt::none);
+            REQUIRE(this->type == bin_op->type);
             this->lhs(bin_op->lhs);
             this->rhs(bin_op->rhs);
         }
@@ -131,7 +132,7 @@ namespace assertions
 
             this->condition(yf->condition);
             this->then_block(&yf->then_block);
-            this->else_block(&yf->else_block);
+            this->else_block(yf->else_block);
         }
     };
 
@@ -256,34 +257,43 @@ AstProcedure *parse_program_and_get_main(std::string_view source)
     AstProgram program{};
     REQUIRE(parse_program(source, program));
 
-    auto main_decl = program.block.find_declaration("main");
-    REQUIRE(main_decl != nullptr);
+    AstProcedure *main{};
+    for (auto statement : program.block.statements)
+    {
+        auto decl = ast_cast<AstDeclaration>(statement);
+        REQUIRE(decl != nullptr);
 
-    auto main = ast_cast<AstProcedure>(main_decl->init_expression);
+        if (decl->identifier.text() == "main")
+        {
+            main = ast_cast<AstProcedure>(decl->init_expression);
+            break;
+        }
+    }
+
     REQUIRE(main != nullptr);
 
     return main;
 }
 
-void test_integer_literal(std::string_view literal_text, int64_t expected_value)
-{
-    auto source = std::format("main := proc() {{ a := {} }}", literal_text);
-
-    as::Procedure{
-        .signature = as::Nop{},
-
-        .body = as::Block{
-            .statements = {
-                as::Declaration{
-                    .identifier      = "a",
-                    .type            = as::IsNull{},
-                    .init_expression = as::Literal{.int_value = expected_value},
-                },
-            }}}(parse_program_and_get_main(source));
-}
-
 TEST_CASE("Integer literals", "[parse]")
 {
+    auto test_integer_literal = [](std::string_view literal_text, int64_t expected_value)
+    {
+        auto source = std::format("main := proc() {{ a := {} }}", literal_text);
+
+        as::Procedure{
+            .signature = as::Nop{},
+
+            .body = as::Block{
+                .statements = {
+                    as::Declaration{
+                        .identifier      = "a",
+                        .type            = as::IsNull{},
+                        .init_expression = as::Literal{.int_value = expected_value},
+                    },
+                }}}(parse_program_and_get_main(source));
+    };
+
 #define CASE(literal) test_integer_literal(#literal, literal);
     CASE(0);
     CASE(1);
@@ -314,17 +324,9 @@ main := proc() {
     a / b
     a % b
     a >= b
+    a = b
 }
 )"sv;
-
-    AstProgram program{};
-    REQUIRE(parse_program(source, program));
-
-    auto main_decl = program.block.find_declaration("main");
-    REQUIRE(main_decl != nullptr);
-
-    auto main = ast_cast<AstProcedure>(main_decl->init_expression);
-    REQUIRE(main != nullptr);
 
     as::Procedure{
         .signature = as::Nop{},
@@ -333,37 +335,42 @@ main := proc() {
             .statements =
                 {
                     as::BinaryOperator{
-                        .type = as::Token{Tt::plus},
+                        .type = Tt::plus,
                         .lhs  = as::Identifier{"a"},
                         .rhs  = as::Identifier{"b"},
                     },
                     as::BinaryOperator{
-                        .type = as::Token{Tt::minus},
+                        .type = Tt::minus,
                         .lhs  = as::Identifier{"a"},
                         .rhs  = as::Identifier{"b"},
                     },
                     as::BinaryOperator{
-                        .type = as::Token{Tt::asterisk},
+                        .type = Tt::asterisk,
                         .lhs  = as::Identifier{"a"},
                         .rhs  = as::Identifier{"b"},
                     },
                     as::BinaryOperator{
-                        .type = as::Token{Tt::slash},
+                        .type = Tt::slash,
                         .lhs  = as::Identifier{"a"},
                         .rhs  = as::Identifier{"b"},
                     },
                     as::BinaryOperator{
-                        .type = as::Token{Tt::mod},
+                        .type = Tt::mod,
                         .lhs  = as::Identifier{"a"},
                         .rhs  = as::Identifier{"b"},
                     },
                     as::BinaryOperator{
-                        .type = as::Token{Tt::greater_than_or_equal},
+                        .type = Tt::greater_than_or_equal,
+                        .lhs  = as::Identifier{"a"},
+                        .rhs  = as::Identifier{"b"},
+                    },
+                    as::BinaryOperator{
+                        .type = Tt::assign,
                         .lhs  = as::Identifier{"a"},
                         .rhs  = as::Identifier{"b"},
                     },
                 },
-        }}(main);
+        }}(parse_program_and_get_main(source));
 }
 
 TEST_CASE("Binary operator precedence", "[parse]")
@@ -385,11 +392,11 @@ main := proc() {
                     {
                         // a + b * c
                         as::BinaryOperator{
-                            .type = as::Token{Tt::plus},
+                            .type = Tt::plus,
                             .lhs  = as::Identifier{"a"},
                             .rhs =
                                 as::BinaryOperator{
-                                    .type = as::Token{Tt::asterisk},
+                                    .type = Tt::asterisk,
                                     .lhs  = as::Identifier{"b"},
                                     .rhs  = as::Identifier{"c"},
                                 },
@@ -397,10 +404,10 @@ main := proc() {
 
                         // a * b + c
                         as::BinaryOperator{
-                            .type = as::Token{Tt::plus},
+                            .type = Tt::plus,
                             .lhs =
                                 as::BinaryOperator{
-                                    .type = as::Token{Tt::asterisk},
+                                    .type = Tt::asterisk,
                                     .lhs  = as::Identifier{"a"},
                                     .rhs  = as::Identifier{"b"},
                                 },
@@ -409,16 +416,16 @@ main := proc() {
 
                         // 1 * 2 < 3 & 4 | 5
                         as::BinaryOperator{
-                            .type = as::Token{Tt::bit_or},
+                            .type = Tt::bit_or,
                             .lhs =
                                 as::BinaryOperator{
-                                    .type = as::Token{Tt::bit_and},
+                                    .type = Tt::bit_and,
                                     .lhs =
                                         as::BinaryOperator{
-                                            .type = as::Token{Tt::less_than},
+                                            .type = Tt::less_than,
                                             .lhs =
                                                 as::BinaryOperator{
-                                                    .type = as::Token{Tt::asterisk},
+                                                    .type = Tt::asterisk,
                                                     .lhs  = as::Literal{.int_value = 1},
                                                     .rhs  = as::Literal{.int_value = 2},
                                                 },
@@ -492,10 +499,10 @@ main := proc() {
                     .type       = as::IsNull{},
                     .init_expression =
                         as::BinaryOperator{
-                            .type = as::Token{Tt::asterisk},
+                            .type = Tt::asterisk,
                             .lhs =
                                 as::BinaryOperator{
-                                    .type = as::Token{Tt::plus},
+                                    .type = Tt::plus,
                                     .lhs  = as::Literal{.int_value = 1},
                                     .rhs  = as::Literal{.int_value = 2},
                                 },
@@ -505,6 +512,147 @@ main := proc() {
     }(parse_program_and_get_main(source));
 
     // std::cout << dump_node(0, parse_program_and_get_main(source));
+}
+
+TEST_CASE("If statement", "[parse]")
+{
+    // TODO: Once implemented, test simple statements without braces
+
+    auto source = R"(
+main := proc() {
+    a := 1
+
+    if 2 < 3 {
+        a = 2
+    }
+
+    if a == 2 {
+        a = 3
+    } else {
+        a = 0
+    }
+}
+)"sv;
+
+    as::Procedure{
+        .signature = as::Nop{},
+
+        .body =
+            as::Block{
+                .statements =
+                    {
+                        as::Declaration{
+                            .identifier      = "a",
+                            .type            = as::IsNull{},
+                            .init_expression = as::Literal{.int_value = 1},
+                        },
+                        as::If{
+                            .condition =
+                                as::BinaryOperator{
+                                    .type = Tt::less_than,
+                                    .lhs  = as::Literal{.int_value = 2},
+                                    .rhs  = as::Literal{.int_value = 3},
+                                },
+                            .then_block =
+                                as::Block{
+                                    .statements =
+                                        {
+                                            as::BinaryOperator{
+                                                .type = Tt::assign,
+                                                .lhs  = as::Identifier{"a"},
+                                                .rhs  = as::Literal{.int_value = 2},
+                                            },
+                                        }},
+                            .else_block = as::IsNull{},
+                        },
+                        as::If{
+                            .condition =
+                                as::BinaryOperator{
+                                    .type = Tt::equal,
+                                    .lhs  = as::Identifier{"a"},
+                                    .rhs  = as::Literal{.int_value = 2},
+                                },
+                            .then_block =
+                                as::Block{
+                                    .statements =
+                                        {
+                                            as::BinaryOperator{
+                                                .type = Tt::assign,
+                                                .lhs  = as::Identifier{"a"},
+                                                .rhs  = as::Literal{.int_value = 3},
+                                            },
+                                        }},
+                            .else_block =
+                                as::Block{
+                                    .statements =
+                                        {
+                                            as::BinaryOperator{
+                                                .type = Tt::assign,
+                                                .lhs  = as::Identifier{"a"},
+                                                .rhs  = as::Literal{.int_value = 0},
+                                            },
+                                        }},
+                        },
+                    }}}(parse_program_and_get_main(source));
+}
+
+TEST_CASE("Procedure signature", "[parse]")
+{
+    auto source = R"(
+main := proc() {
+    without_arguments := proc() {}
+    with_arguments := proc(a: i64, b: i64 = 2, c := 3 * 4) {}
+}
+)"sv;
+
+    as::Procedure{
+        .signature = as::Nop{},
+
+        .body =
+            as::Block{
+                .statements =
+                    {
+                        as::Declaration{
+                            .identifier = "without_arguments",
+                            .type       = as::IsNull{},
+                            .init_expression =
+                                as::Procedure{
+                                    .signature = as::ProcedureSignature{.arguments = {}},
+                                    .body      = as::Block{.statements = {}},
+                                }},
+                        as::Declaration{
+                            .identifier = "with_arguments",
+                            .type       = as::IsNull{},
+                            .init_expression =
+                                as::Procedure{
+                                    .signature =
+                                        as::ProcedureSignature{
+                                            .arguments =
+                                                {
+                                                    as::Declaration{
+                                                        .identifier      = "a",
+                                                        .type            = as::SimpleType{"i64"},
+                                                        .init_expression = as::IsNull{},
+                                                    },
+                                                    as::Declaration{
+                                                        .identifier      = "b",
+                                                        .type            = as::SimpleType{"i64"},
+                                                        .init_expression = as::Literal{.int_value = 2},
+                                                    },
+                                                    as::Declaration{
+                                                        .identifier = "c",
+                                                        .type       = as::IsNull{},
+                                                        .init_expression =
+                                                            as::BinaryOperator{
+                                                                .type = Tt::asterisk,
+                                                                .lhs  = as::Literal{.int_value = 3},
+                                                                .rhs  = as::Literal{.int_value = 4},
+                                                            },
+                                                    },
+                                                }},
+                                    .body = as::Block{.statements = {}},
+                                }},
+                    }}}(parse_program_and_get_main(source));
 }
 
 TEST_CASE("Program", "[parse]")

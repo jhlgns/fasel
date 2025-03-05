@@ -17,6 +17,7 @@ set(shared_source_files
     memory_pool.cpp
     parse.cpp
     stringify.cpp
+    typecheck.cpp
     vm.cpp
     )
 
@@ -42,6 +43,7 @@ add_executable(
     lex_test.cpp
     parse_test.cpp
     string_util_test.cpp
+    typecheck_test.cpp
     vm_test.cpp
     ${shared_source_files})
 target_include_directories(tests PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

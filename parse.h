@@ -53,6 +53,8 @@ enum class LiteralType
 
 struct AstNode
 {
+    AstKind kind{};
+
     AstNode() = delete;
 
     virtual ~AstNode() = default;
@@ -61,8 +63,6 @@ struct AstNode
         : kind{kind}
     {
     }
-
-    AstKind kind{};
 };
 
 template<AstKind the_kind>
@@ -133,42 +133,13 @@ struct AstBlock : public AstHelper<AstKind::block>
 {
     bool is_proc_body{};
     std::vector<AstNode *> statements{};
-
-    // Compiler information
-    AstBlock *parent_block{};
-    int64_t offset_from_parent_block{};
-    int64_t size{};
-    int64_t size_of_args{};
-
-    bool is_global() const { return this->parent_block == nullptr; }
-
-    inline AstDeclaration *find_declaration(std::string_view name)
-    {
-        for (auto statement : this->statements)
-        {
-            if (auto decl = ast_cast<AstDeclaration>(statement))
-            {
-                if (decl->identifier.text() == name)
-                {
-                    return decl;
-                }
-            }
-        }
-
-        if (this->parent_block != nullptr)
-        {
-            return this->parent_block->find_declaration(name);
-        }
-
-        return nullptr;
-    }
 };
 
 struct AstIf : public AstHelper<AstKind::if_branch>
 {
     AstNode *condition{};
     AstBlock then_block{};
-    AstBlock else_block{};
+    AstBlock *else_block{};
 };
 
 struct AstReturn : public AstHelper<AstKind::return_statement>
@@ -240,7 +211,7 @@ void visit(AstNode *node, const F &f)
     {
         visit(yf->condition, f);
         visit(&yf->then_block, f);
-        visit(&yf->else_block, f);
+        visit(yf->else_block, f);
         return;
     }
 

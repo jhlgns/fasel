@@ -157,10 +157,13 @@ Parser parse_statement(Parser p, AstNode *&out_statement)
 
         if (p >>= p.quiet().parse_keyword("else"))
         {
-            if (!(p >>= parse_block(p, yf.else_block)))
+            AstBlock else_block{};
+            if (!(p >>= parse_block(p, else_block)))
             {
                 return start;
             }
+
+            yf.else_block = new AstBlock{std::move(else_block)};
         }
 
         out_statement = new AstIf{std::move(yf)};

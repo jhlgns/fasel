@@ -6,6 +6,7 @@
 
 enum class TokenType
 {
+    none,
     asterisk,  // *
     slash,  // /
     mod,  // %
@@ -119,6 +120,8 @@ inline int binary_operator_precedence(TokenType binop)
         case Tt::logical_and: return 20;
 
         case Tt::logical_or: return 10;
+
+        case Tt::assign: return 5;
 
         default: return 0;
     }
