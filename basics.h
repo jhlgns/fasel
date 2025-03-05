@@ -3,6 +3,8 @@
 #include <iostream>
 #include <utility>
 
+using namespace std::string_view_literals;
+
 template<typename F>
 struct ScopeExit
 {

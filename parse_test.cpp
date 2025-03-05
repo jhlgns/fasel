@@ -1,4 +1,5 @@
 #include "parse.h"
+#include "stringify.h"
 #include <catch2/catch_test_macros.hpp>
 
 namespace assertions
@@ -11,7 +12,7 @@ namespace assertions
         void operator()(auto) { }
     };
 
-    struct Null
+    struct IsNull
     {
         void operator()(AstNode *node) { REQUIRE(node == nullptr); }
     };
@@ -248,6 +249,8 @@ namespace assertions
     };
 }  // namespace assertions
 
+namespace as = assertions;
+
 AstProcedure *parse_program_and_get_main(std::string_view source)
 {
     AstProgram program{};
@@ -264,15 +267,7 @@ AstProcedure *parse_program_and_get_main(std::string_view source)
 
 void test_integer_literal(std::string_view literal_text, int64_t expected_value)
 {
-    namespace as = assertions;
-
-    AstProgram program;
-
     auto source = std::format("main := proc() {{ a := {} }}", literal_text);
-    REQUIRE(parse_program(source, program));
-
-    auto main_decl = program.block.find_declaration("main");
-    REQUIRE(main_decl != nullptr);
 
     as::Procedure{
         .signature = as::Nop{},
@@ -281,10 +276,10 @@ void test_integer_literal(std::string_view literal_text, int64_t expected_value)
             .statements = {
                 as::Declaration{
                     .identifier      = "a",
-                    .type            = as::Null{},
+                    .type            = as::IsNull{},
                     .init_expression = as::Literal{.int_value = expected_value},
                 },
-            }}}(main_decl->init_expression);
+            }}}(parse_program_and_get_main(source));
 }
 
 TEST_CASE("Integer literals", "[parse]")
@@ -311,9 +306,7 @@ TEST_CASE("Integer literals", "[parse]")
 
 TEST_CASE("Basic binary operators", "[parse]")
 {
-    namespace as = assertions;
-
-    std::string_view source{R"(
+    auto source = R"(
 main := proc() {
     a + b
     a - b
@@ -322,7 +315,7 @@ main := proc() {
     a % b
     a >= b
 }
-)"};
+)"sv;
 
     AstProgram program{};
     REQUIRE(parse_program(source, program));
@@ -375,16 +368,14 @@ main := proc() {
 
 TEST_CASE("Binary operator precedence", "[parse]")
 {
-    namespace as = assertions;
-
-    std::string_view source{R"(
+    auto source = R"(
 main := proc() {
     a + b * c
     a * b + c
     1 * 2 < 3 & 4 | 5
     // 1 | 2 & 3 < 4 * 5
 }
-)"};
+)"sv;
 
     as::Procedure{
         .signature = as::Nop{},
@@ -451,16 +442,14 @@ main := proc() {
 
 TEST_CASE("Declaration", "[parse]")
 {
-    namespace as = assertions;
-
-    std::string_view source{R"(
+    auto source = R"(
 main := proc() {
     a: i64
     b: i64 = 2
     c := 3
     d := proc() {}
 }
-)"};
+)"sv;
 
     as::Procedure{
         .signature = as::Nop{},
@@ -472,7 +461,7 @@ main := proc() {
                         as::Declaration{
                             .identifier      = "a",
                             .type            = as::SimpleType{"i64"},
-                            .init_expression = as::Null{},
+                            .init_expression = as::IsNull{},
                         },
                         as::Declaration{
                             .identifier      = "b",
@@ -481,21 +470,54 @@ main := proc() {
                         },
                         as::Declaration{
                             .identifier      = "c",
-                            .type            = as::Null{},
+                            .type            = as::IsNull{},
                             .init_expression = as::Literal{.int_value = 3},
                         },
                         as::Declaration{
                             .identifier      = "d",
-                            .type            = as::Null{},
+                            .type            = as::IsNull{},
                             .init_expression = as::Procedure{.signature = as::Nop{}, .body = as::Nop{}},
                         },
                     }},
     }(parse_program_and_get_main(source));
 }
 
+TEST_CASE("Parenthesis expression", "[parse]")
+{
+    auto source = R"(
+main := proc() {
+    a := (1 + 2) * 3
+}
+)"sv;
+
+    as::Procedure{
+        .signature = as::Nop{},
+
+        .body =
+            as::Block{
+                .statements = {as::Declaration{
+                    .identifier = "a",
+                    .type       = as::IsNull{},
+                    .init_expression =
+                        as::BinaryOperator{
+                            .type = as::Token{Tt::asterisk},
+                            .lhs =
+                                as::BinaryOperator{
+                                    .type = as::Token{Tt::plus},
+                                    .lhs  = as::Literal{.int_value = 1},
+                                    .rhs  = as::Literal{.int_value = 2},
+                                },
+                            .rhs = as::Literal{.int_value = 3},
+                        },
+                }}},
+    }(parse_program_and_get_main(source));
+
+    // std::cout << dump_node(0, parse_program_and_get_main(source));
+}
+
 TEST_CASE("Program", "[parse]")
 {
-    std::string_view source{R"(
+    auto source = R"(
 /*
 Multiline
 Comment
@@ -509,9 +531,9 @@ Comment
 
 f := proc(a: int, b: int) {
     if a == 1 {
-        return a * b + 2 >> 2
+        return a * (b + 2) >> 2
     } else {
-        return a / 400 * f(b | 2, a &0xff)
+        return a / (400 + f(b | 2, a & 0xff))
     }
 }
 
@@ -519,7 +541,7 @@ main := proc() {
     x := f(3, 4)
 }
 
-)"};
+)"sv;
 
     AstProgram program;
     REQUIRE(parse_program(source, program));

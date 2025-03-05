@@ -340,6 +340,25 @@ Parser parse_primary_expr(Parser p, AstNode *&out_primary_expr)
         return p;
     }
 
+    if (p >>= p.quiet().parse_token(Tt::parenthesis_open))
+    {
+        p.arm("parsing parenthesis expression");
+
+        AstNode *expr{};
+        if (!(p >>= parse_expr(p, expr)))
+        {
+            return start;
+        }
+
+        if (!(p >>= p.parse_token(Tt::parenthesis_close)))
+        {
+            return start;
+        }
+
+        out_primary_expr = expr;
+        return p;
+    }
+
     AstProcedure proc{};
     if (p >>= parse_proc(p, proc))
     {
@@ -352,7 +371,7 @@ Parser parse_primary_expr(Parser p, AstNode *&out_primary_expr)
     return start;
 }
 
-Parser parse_suffix_expr(Parser p, AstNode *lhs, AstNode **node)
+Parser parse_expression_suffix(Parser p, AstNode *lhs, AstNode **node)
 {
     auto start = p;
 
@@ -412,7 +431,7 @@ Parser parse_binary_expr(Parser p, AstNode *&out_node, int prev_prec)
     {
         return start;
     }
-    p >>= parse_suffix_expr(p.quiet(), lhs, &lhs);
+    p >>= parse_expression_suffix(p.quiet(), lhs, &lhs);
 
     while (true)
     {
