@@ -380,7 +380,7 @@ Parser parse_expression_suffix(Parser p, AstNode *lhs, AstNode **node)
         p.arm("parsing procedure call");
 
         AstProcedureCall call{};
-        call.proc = lhs;
+        call.procedure = lhs;
 
         auto require_close = false;
         while (true)

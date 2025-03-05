@@ -3,6 +3,112 @@
 #include "parse.h"
 #include <string_view>
 
+AstBinaryOperator *make_binary_operator(TokenType type, AstNode *lhs, AstNode *rhs)
+{
+    auto result  = new AstBinaryOperator{};
+    result->type = type;
+    result->lhs  = lhs;
+    result->rhs  = rhs;
+    return result;
+}
+
+AstBlock *make_block(std::vector<AstNode *> &&statements)
+{
+    auto result        = new AstBlock{};
+    result->statements = std::move(statements);
+    return result;
+}
+
+AstDeclaration *make_declaration(std::string_view identifier)
+{
+    auto result        = new AstDeclaration{};
+    result->identifier = Token{
+        .type = Tt::identifier,
+        .pos  = Cursor{.at = identifier.data(), .line = -1, .line_offset = -1},
+        .len  = identifier.size(),
+    };
+    return result;
+}
+
+AstIdentifier *make_identifier(std::string_view identifier)
+{
+    auto result        = new AstIdentifier{};
+    result->identifier = Token{
+        .type = Tt::identifier,
+        .pos  = Cursor{.at = identifier.data(), .line = -1, .line_offset = -1},
+        .len  = identifier.size(),
+    };
+    return result;
+}
+
+AstIf *make_if(AstNode *condition, AstBlock *then_block, AstBlock *else_block)
+{
+    auto result        = new AstIf{};
+    result->condition  = condition;
+    result->then_block = std::move(*then_block);
+    result->else_block = std::move(*else_block);
+    return result;
+}
+
+AstLiteral *make_int_literal(int64_t value)
+{
+    auto result       = new AstLiteral{};
+    result->type      = LiteralType::integer;
+    result->int_value = value;
+    return result;
+}
+
+AstProcedure *make_procedure(AstProcedureSignature *signature, AstBlock *body)
+{
+    auto result       = new AstProcedure{};
+    result->signature = std::move(*signature);
+    result->body      = std::move(*body);
+    return result;
+}
+
+AstProcedureCall *make_procedure_call(AstNode *procedure, std::vector<AstNode *> &&arguments)
+{
+    auto result       = new AstProcedureCall{};
+    result->procedure = procedure;
+    result->arguments = std::move(arguments);
+    return result;
+}
+
+AstProcedureSignature *make_procedure_signature(std::vector<AstDeclaration> arguments)
+{
+    auto result       = new AstProcedureSignature{};
+    result->arguments = std::move(arguments);
+    return result;
+}
+
+AstProgram *make_program(std::vector<AstDeclaration> declarations)
+{
+    auto result = new AstProgram{};
+    for (auto &&decl : declarations)
+    {
+        result->block.statements.push_back(new AstDeclaration{std::move(decl)});
+    }
+    return result;
+}
+
+AstReturn *make_return(AstNode *expression)
+{
+    auto result        = new AstReturn{};
+    result->expression = expression;
+    return result;
+}
+
+AstSimpleType *make_simple_type(std::string_view identifier)
+{
+    auto result        = new AstSimpleType{};
+    result->identifier = Token{
+        .type = Tt::identifier,
+        .pos  = Cursor{.at = identifier.data(), .line = -1, .line_offset = -1},
+        .len  = identifier.size(),
+    };
+    return result;
+}
+
 void test_codegen(std::string_view source, BytecodeWriter *mock)
 {
     AstProgram program;
@@ -23,13 +129,13 @@ void test_codegen(std::string_view source, BytecodeWriter *mock)
     }
 }
 
-void get_all_allocations(AstBlock *block, std::unordered_map<std::string_view, AstDeclaration *> *all_decls)
+void get_all_allocations(const AstBlock &block, std::unordered_map<std::string_view, AstDeclaration *> &all_decls)
 {
-    for (auto statement : block->statements)
+    for (auto statement : block.statements)
     {
         if (auto decl = ast_cast<AstDeclaration>(statement))
         {
-            auto [it, ok] = all_decls->emplace(decl->identifier.text(), decl);
+            auto [it, ok] = all_decls.emplace(decl->identifier.text(), decl);
             REQUIRE(ok);
             continue;
         }
@@ -37,7 +143,7 @@ void get_all_allocations(AstBlock *block, std::unordered_map<std::string_view, A
         auto child_blocks = get_statement_child_blocks(statement);
         for (auto child_block : child_blocks)
         {
-            get_all_allocations(child_block, all_decls);
+            get_all_allocations(*child_block, all_decls);
         }
     }
 }
@@ -60,7 +166,7 @@ void require_allocation(
     REQUIRE(generate_code(proc, &w));
 
     std::unordered_map<std::string_view, AstDeclaration *> all_decls;
-    get_all_allocations(&proc->body, &all_decls);
+    get_all_allocations(proc->body, all_decls);
 
     REQUIRE(all_decls.size() == expected_variable_locations.size());
 
@@ -79,8 +185,7 @@ void require_allocation(
 
 TEST_CASE("Locals get allocated and assigned to their init expression", "[compile]")
 {
-    auto source = std::string_view{
-        R"(
+    auto source = R"(
 main := proc() {
     a := 1
     b := 2
@@ -99,7 +204,7 @@ main := proc() {
 
     return b
 }
-)"};
+)"sv;
 
     BytecodeWriter mock{};
 
@@ -143,8 +248,7 @@ main := proc() {
 
 TEST_CASE("Local variable initialization with nested blocks", "[compile]")
 {
-    auto source = std::string_view{
-        R"(
+    auto source = R"(
 main := proc() {
     a := 1
     b := 2
@@ -153,7 +257,7 @@ main := proc() {
     }
     return b
 }
-)"};
+)"sv;
 
     BytecodeWriter mock{};
 
@@ -182,12 +286,11 @@ main := proc() {
 
 TEST_CASE("An implicit return statement is generated if it missing in the source code", "[compile]")
 {
-    auto source = std::string_view{
-        R"(
+    auto source = R"(
 main := proc() {
     a := 1
 }
-)"};
+)"sv;
 
     BytecodeWriter mock{};
 
@@ -201,8 +304,7 @@ main := proc() {
 
 TEST_CASE("Local variable allocation 1", "[compile]")
 {
-    auto source = std::string_view{
-        R"(
+    auto source = R"(
 main := proc() {
     a := 1
 
@@ -220,7 +322,7 @@ main := proc() {
         f := 6
     }
 }
-)"};
+)"sv;
 
     require_allocation(
         source,
@@ -236,8 +338,7 @@ main := proc() {
 
 TEST_CASE("Local variable allocation 2", "[compile]")
 {
-    auto source = std::string_view{
-        R"(
+    auto source = R"(
 main := proc() {
     a := 1
     {
@@ -250,7 +351,7 @@ main := proc() {
         }
     }
 }
-)"};
+)"sv;
 
     require_allocation(
         source,
@@ -264,8 +365,7 @@ main := proc() {
 
 TEST_CASE("Local variable allocation 3", "[compile]")
 {
-    auto source = std::string_view{
-        R"(
+    auto source = R"(
 main := proc() {
     a := 1
 
@@ -279,7 +379,7 @@ main := proc() {
 
     d := 4
 }
-)"};
+)"sv;
 
     require_allocation(
         source,
@@ -293,8 +393,7 @@ main := proc() {
 
 TEST_CASE("If 1", "[compile]")
 {
-    auto source = std::string_view{
-        R"(
+    auto source = R"(
 main := proc() {
     a := 1
 
@@ -302,7 +401,7 @@ main := proc() {
         b := 2
     }
 }
-)"};
+)"sv;
 
     // TODO: For allocation tests, don't make this an integration test - create a helper function that takes an array of
     // identifier-address pairs and checks if they match based on the resulting AST
@@ -336,8 +435,7 @@ main := proc() {
 
 TEST_CASE("Basic procedure calling", "[compile]")
 {
-    auto source = std::string_view{
-        R"(
+    auto source = R"(
 f := proc() {
     return 456
 }
@@ -345,7 +443,7 @@ f := proc() {
 main := proc() {
     return f()
 }
-)"};
+)"sv;
 
     BytecodeWriter mock{};
 
@@ -363,8 +461,7 @@ main := proc() {
 
 TEST_CASE("Procedure calling with arguments", "[compile]")
 {
-    auto source = std::string_view{
-        R"(
+    auto source = R"(
 f := proc(a i64, b i64, c i64) {
     d := 5
     return a + b * c - d
@@ -373,7 +470,7 @@ f := proc(a i64, b i64, c i64) {
 main := proc() {
     return f(1, 2, 3)
 }
-)"};
+)"sv;
 
     auto total = 32;
     auto a     = 0 - total;

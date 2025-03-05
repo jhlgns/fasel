@@ -112,7 +112,7 @@ std::string to_string(int indent_level, AstProcedureCall *node)
 
     result += indent(indent_level, "ProcCall(\n");
     result += std::format("{}\n", indent(indent_level + 1, "Proc:"));
-    result += std::format("{}\n", dump_node(indent_level + 2, node->proc));
+    result += std::format("{}\n", dump_node(indent_level + 2, node->procedure));
     result += std::format("{}\n", indent(indent_level + 1, "Args:"));
 
     for (AstNode *arg : node->arguments)

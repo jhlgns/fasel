@@ -403,7 +403,7 @@ bool is_expression(AstKind kind)
             }
         }
 
-        if (generate_expr(proc_call->proc, w) == false)
+        if (generate_expr(proc_call->procedure, w) == false)
         {
             return false;
         }

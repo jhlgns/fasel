@@ -4,6 +4,8 @@
 #include "lex.h"
 #include <vector>
 
+// TODO: Remove all compiler information from the AST nodes and put them into a separate node hierarchy
+
 enum class AstKind
 {
     binary_operator,
@@ -187,7 +189,7 @@ struct AstProcedure : public AstHelper<AstKind::procedure>
 
 struct AstProcedureCall : public AstHelper<AstKind::procedure_call>
 {
-    AstNode *proc{};
+    AstNode *procedure{};
     std::vector<AstNode *> arguments{};
 };
 
@@ -256,7 +258,7 @@ void visit(AstNode *node, const F &f)
 
     if (auto call = ast_cast<AstProcedureCall>(node))
     {
-        visit(call->proc, f);
+        visit(call->procedure, f);
 
         for (auto arg : call->arguments)
         {

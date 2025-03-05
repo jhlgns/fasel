@@ -206,7 +206,7 @@ namespace assertions
             auto call = ast_cast<AstProcedureCall>(node);
             REQUIRE(call != nullptr);
 
-            this->procedure(call->proc);
+            this->procedure(call->procedure);
 
             REQUIRE(call->arguments.size() == this->arguments.size());
 
@@ -373,7 +373,6 @@ main := proc() {
     a + b * c
     a * b + c
     1 * 2 < 3 & 4 | 5
-    // 1 | 2 & 3 < 4 * 5
 }
 )"sv;
 
@@ -429,13 +428,6 @@ main := proc() {
                                 },
                             .rhs = as::Literal{.int_value = 5},
                         },
-
-                    // 1 | 2 & 3 < 4 * 5
-                    // as::BinaryOperator{
-                    //     .type = as::Token{Tt::plus},
-                    //     .lhs = ,
-                    //     .rhs = ,
-                    // },
                     },
             }}(parse_program_and_get_main(source));
 }
@@ -529,7 +521,7 @@ Comment
 
 // Single line comment
 
-f := proc(a: int, b: int) {
+f := proc(a: i64, b: i64) {
     if a == 1 {
         return a * (b + 2) >> 2
     } else {
