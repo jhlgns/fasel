@@ -52,9 +52,9 @@ AstIf *make_if(AstNode *condition, AstBlock *then_block, AstBlock *else_block)
 
 AstLiteral *make_int_literal(int64_t value)
 {
-    auto result       = new AstLiteral{};
-    result->type      = LiteralType::integer;
-    result->int_value = value;
+    auto result                  = new AstLiteral{};
+    result->type                 = LiteralType::signed_integer;
+    result->signed_integer_value = value;
     return result;
 }
 

@@ -46,8 +46,10 @@ inline const char *to_string(AstKind kind)
 enum class LiteralType
 {
     none,
-    integer,
-    real,
+    signed_integer,
+    unsigned_integer,
+    float32,
+    float64,
     string,
 };
 
@@ -121,7 +123,10 @@ struct AstLiteral : public AstHelper<AstKind::literal>
 {
     Token token{};
     LiteralType type{};
-    int64_t int_value{};
+    int64_t signed_integer_value{};
+    uint64_t unsigned_integer_value{};  // TODO: Parse
+    float float_value{};  // TODO: Parse
+    double double_value{};  // TODO: Parse
 };
 
 struct AstProcedureSignature : public AstHelper<AstKind::procedure_signature>

@@ -159,7 +159,7 @@ namespace assertions
 
             if (this->int_value.has_value())
             {
-                REQUIRE(this->int_value.value() == literal->int_value);
+                REQUIRE(this->int_value.value() == literal->signed_integer_value);
             }
         }
     };

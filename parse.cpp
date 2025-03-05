@@ -307,16 +307,16 @@ Parser parse_primary_expr(Parser p, AstNode *&out_primary_expr)
 
         AstLiteral literal{};
         literal.token = t;
-        literal.type  = LiteralType::integer;
+        literal.type  = LiteralType::signed_integer;  // TODO
 
         std::from_chars_result result;
         if (t.pos.at[0] == '0' && t.pos.at[1] == 'x')
         {
-            result = std::from_chars(t.pos.at + 2, t.pos.at + t.len, literal.int_value, 16);
+            result = std::from_chars(t.pos.at + 2, t.pos.at + t.len, literal.signed_integer_value, 16);
         }
         else
         {
-            result = std::from_chars(t.pos.at, t.pos.at + t.len, literal.int_value);
+            result = std::from_chars(t.pos.at, t.pos.at + t.len, literal.signed_integer_value);
         }
 
         if (result.ec != std::errc{})
@@ -363,7 +363,7 @@ Parser parse_primary_expr(Parser p, AstNode *&out_primary_expr)
     }
 
     AstProcedure proc{};
-    if (p >>= parse_proc(p, proc))
+    if (p >>= parse_proc(p.quiet(), proc))
     {
         out_primary_expr = new AstProcedure{std::move(proc)};
         return p;
@@ -488,6 +488,8 @@ Parser parse_type(Parser p, AstNode *&out_type)
 
         return p;
     }
+
+    // TODO: Pointer types, array types...
 
     return start;
 }
