@@ -35,6 +35,8 @@ enum class TokenType
     parenthesis_close,  // )
     brace_open,  // {
     brace_close,  // }
+    bracket_open,  // [
+    bracket_close,  // ]
 
     identifier,
     keyword,
@@ -66,6 +68,8 @@ inline const char *to_string(TokenType t)
         case Tt::parenthesis_close:     return "parenthesis_close";
         case Tt::brace_open:            return "brace_open";
         case Tt::brace_close:           return "brace_close";
+        case Tt::bracket_open:          return "bracket_open";
+        case Tt::bracket_close:         return "bracket_close";
         case Tt::colon:                 return "colon";
         case Tt::left_shift:            return "left_shift";
         case Tt::right_shift:           return "right_shift";

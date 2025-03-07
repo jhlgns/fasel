@@ -39,19 +39,22 @@ struct Type
 
     inline bool is_valid() const { return this->size > 0 || this->kind == Kind::voyd; }
     inline bool is_numerical() const { return this->kind == Kind::integer || this->kind == Kind::floatingpoint; }
+
+    auto operator<=>(const Type &) const = default;
 };
 
 struct BuiltinTypes
 {
-    constexpr static Type voyd = Type{.kind = Type::Kind::voyd};
-    constexpr static Type i64  = Type{.kind = Type::Kind::integer, .size = 8, .is_signed = true};
-    constexpr static Type i32  = Type{.kind = Type::Kind::integer, .size = 4, .is_signed = true};
-    constexpr static Type i16  = Type{.kind = Type::Kind::integer, .size = 2, .is_signed = true};
-    constexpr static Type i8   = Type{.kind = Type::Kind::integer, .size = 1, .is_signed = true};
-    constexpr static Type u64  = Type{.kind = Type::Kind::integer, .size = 8, .is_signed = false};
-    constexpr static Type u32  = Type{.kind = Type::Kind::integer, .size = 4, .is_signed = false};
-    constexpr static Type u16  = Type{.kind = Type::Kind::integer, .size = 2, .is_signed = false};
-    constexpr static Type u8   = Type{.kind = Type::Kind::integer, .size = 1, .is_signed = false};
+    constexpr static Type voyd    = Type{.kind = Type::Kind::voyd};
+    constexpr static Type i64     = Type{.kind = Type::Kind::integer, .size = 8, .is_signed = true};
+    constexpr static Type i32     = Type{.kind = Type::Kind::integer, .size = 4, .is_signed = true};
+    constexpr static Type i16     = Type{.kind = Type::Kind::integer, .size = 2, .is_signed = true};
+    constexpr static Type i8      = Type{.kind = Type::Kind::integer, .size = 1, .is_signed = true};
+    constexpr static Type u64     = Type{.kind = Type::Kind::integer, .size = 8, .is_signed = false};
+    constexpr static Type u32     = Type{.kind = Type::Kind::integer, .size = 4, .is_signed = false};
+    constexpr static Type u16     = Type{.kind = Type::Kind::integer, .size = 2, .is_signed = false};
+    constexpr static Type u8      = Type{.kind = Type::Kind::integer, .size = 1, .is_signed = false};
+    constexpr static Type boolean = Type{.kind = Type::Kind::boolean, .size = 1};
 };
 
 struct Node

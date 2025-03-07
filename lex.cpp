@@ -132,12 +132,6 @@ Token Lexer::next_token()
 
     // clang-format off
     auto simple_tokens = {
-        std::make_tuple("return", Tt::keyword),
-        std::make_tuple("while", Tt::keyword),
-        std::make_tuple("proc", Tt::keyword),
-        std::make_tuple("else", Tt::keyword),
-        std::make_tuple("if", Tt::keyword),
-
         // std::make_tuple(":=", Tt::declaration_assignment),
         std::make_tuple("<<", Tt::left_shift),
         std::make_tuple(">>", Tt::right_shift),
@@ -162,6 +156,8 @@ Token Lexer::next_token()
         std::make_tuple(")", Tt::parenthesis_close),
         std::make_tuple("{", Tt::brace_open),
         std::make_tuple("}", Tt::brace_close),
+        std::make_tuple("[", Tt::bracket_open),
+        std::make_tuple("]", Tt::bracket_close),
         std::make_tuple(">", Tt::greater_than),
         std::make_tuple("<", Tt::less_than),
         std::make_tuple(":", Tt::colon),
@@ -181,6 +177,13 @@ Token Lexer::next_token()
     }
     if (this->cursor.at > start.at)
     {
+        std::string_view text{start.at, this->cursor.at};
+        auto is_keyword = text == "return" || text == "while" || text == "proc" || text == "else" || text == "if";
+        if (is_keyword)
+        {
+            return emit(*this, start, Tt::keyword);
+        }
+
         return emit(*this, start, Tt::identifier);
     }
 

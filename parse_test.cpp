@@ -167,6 +167,7 @@ namespace assertions
     struct ProcedureSignature
     {
         std::vector<Assertion<AstDeclaration *>> arguments;
+        Assertion<AstNode *> return_type;
 
         void operator()(AstNode *node)
         {
@@ -179,6 +180,8 @@ namespace assertions
             {
                 this->arguments[i](&signature->arguments[i]);
             }
+
+            this->return_type(signature->return_type);
         }
     };
 
@@ -248,6 +251,34 @@ namespace assertions
             REQUIRE(this->identifier == type->identifier.text());
         }
     };
+
+    struct PointerType
+    {
+        Assertion<AstNode *> target_type;
+
+        void operator()(AstNode *node)
+        {
+            auto type = ast_cast<AstPointerType>(node);
+            REQUIRE(type != nullptr);
+
+            this->target_type(type->target_type);
+        }
+    };
+
+    struct ArrayType
+    {
+        Assertion<AstNode *> length_expression;
+        Assertion<AstNode *> element_type;
+
+        void operator()(AstNode *node)
+        {
+            auto type = ast_cast<AstArrayType>(node);
+            REQUIRE(type != nullptr);
+
+            this->length_expression(type->length_expression);
+            this->element_type(type->element_type);
+        }
+    };
 }  // namespace assertions
 
 namespace as = assertions;
@@ -279,7 +310,7 @@ TEST_CASE("Integer literals", "[parse]")
 {
     auto test_integer_literal = [](std::string_view literal_text, int64_t expected_value)
     {
-        auto source = std::format("main := proc() {{ a := {} }}", literal_text);
+        auto source = std::format("main := proc() void {{ a := {} }}", literal_text);
 
         as::Procedure{
             .signature = as::Nop{},
@@ -317,7 +348,7 @@ TEST_CASE("Integer literals", "[parse]")
 TEST_CASE("Basic binary operators", "[parse]")
 {
     auto source = R"(
-main := proc() {
+main := proc() void {
     a + b
     a - b
     a * b
@@ -376,7 +407,7 @@ main := proc() {
 TEST_CASE("Binary operator precedence", "[parse]")
 {
     auto source = R"(
-main := proc() {
+main := proc() void {
     a + b * c
     a * b + c
     1 * 2 < 3 & 4 | 5
@@ -442,11 +473,11 @@ main := proc() {
 TEST_CASE("Declaration", "[parse]")
 {
     auto source = R"(
-main := proc() {
+main := proc() void {
     a: i64
     b: i64 = 2
     c := 3
-    d := proc() {}
+    d := proc() string {}
 }
 )"sv;
 
@@ -484,7 +515,7 @@ main := proc() {
 TEST_CASE("Parenthesis expression", "[parse]")
 {
     auto source = R"(
-main := proc() {
+main := proc() void {
     a := (1 + 2) * 3
 }
 )"sv;
@@ -519,7 +550,7 @@ TEST_CASE("If statement", "[parse]")
     // TODO: Once implemented, test simple statements without braces
 
     auto source = R"(
-main := proc() {
+main := proc() void {
     a := 1
 
     if 2 < 3 {
@@ -599,9 +630,9 @@ main := proc() {
 TEST_CASE("Procedure signature", "[parse]")
 {
     auto source = R"(
-main := proc() {
-    without_arguments := proc() {}
-    with_arguments := proc(a: i64, b: i64 = 2, c := 3 * 4) {}
+main := proc() void {
+    without_arguments := proc() void {}
+    with_arguments := proc(a: i64, b: i64 = 2, c := 3 * 4) i64 {}
 }
 )"sv;
 
@@ -617,8 +648,12 @@ main := proc() {
                             .type       = as::IsNull{},
                             .init_expression =
                                 as::Procedure{
-                                    .signature = as::ProcedureSignature{.arguments = {}},
-                                    .body      = as::Block{.statements = {}},
+                                    .signature =
+                                        as::ProcedureSignature{
+                                            .arguments   = {},
+                                            .return_type = as::SimpleType{"void"},
+                                        },
+                                    .body = as::Block{.statements = {}},
                                 }},
                         as::Declaration{
                             .identifier = "with_arguments",
@@ -649,10 +684,116 @@ main := proc() {
                                                                 .rhs  = as::Literal{.int_value = 4},
                                                             },
                                                     },
-                                                }},
+                                                },
+                                            .return_type = as::SimpleType{"i64"}},
                                     .body = as::Block{.statements = {}},
                                 }},
                     }}}(parse_program_and_get_main(source));
+}
+
+TEST_CASE("Types", "[parse]")
+{
+    auto source = R"(
+main := proc() void {
+    simple: i64
+    pointer: *i64
+    array_of_simple: [27]i64
+
+    pointer_to_pointer: **i64
+    pointer_to_array: *[10]i64
+    array_of_pointers: [10]*i64
+
+    // procedure_pointer: proc(a i64, b []*i64, c: [2]proc(a: i64) *i64) void
+    procedure_pointer: proc() void
+    array_of_procedure_pointers: [10]proc() void
+}
+)"sv;
+
+    as::Procedure{
+        .signature = as::Nop{},
+
+        .body =
+            as::Block{
+                .statements =
+                    {
+                        as::Declaration{
+                            .identifier      = "simple",
+                            .type            = as::SimpleType{"i64"},
+                            .init_expression = as::IsNull{},
+                        },
+                        as::Declaration{
+                            .identifier      = "pointer",
+                            .type            = as::PointerType{.target_type = as::SimpleType{"i64"}},
+                            .init_expression = as::IsNull{},
+                        },
+                        as::Declaration{
+                            .identifier = "array_of_simple",
+                            .type =
+                                as::ArrayType{
+                                    .length_expression = as::Literal{.int_value = 27},
+                                    .element_type      = as::SimpleType{"i64"},
+                                },
+                            .init_expression = as::IsNull{},
+                        },
+                        as::Declaration{
+                            .identifier = "pointer_to_pointer",
+                            .type =
+                                as::PointerType{
+                                    .target_type =
+                                        as::PointerType{
+                                            .target_type = as::SimpleType{"i64"},
+                                        },
+                                },
+                            .init_expression = as::IsNull{},
+                        },
+                        as::Declaration{
+                            .identifier = "pointer_to_array",
+                            .type =
+                                as::PointerType{
+                                    .target_type =
+                                        as::ArrayType{
+                                            .length_expression = as::Literal{.int_value = 10},
+                                            .element_type      = as::SimpleType{"i64"}},
+                                },
+                            .init_expression = as::IsNull{},
+                        },
+                        as::Declaration{
+                            .identifier = "array_of_pointers",
+                            .type =
+                                as::ArrayType{
+                                    .length_expression = as::Literal{.int_value = 10},
+                                    .element_type =
+                                        as::PointerType{
+                                            .target_type = as::SimpleType{"i64"},
+                                        },
+                                },
+                            .init_expression = as::IsNull{},
+                        },
+                        as::Declaration{
+                            .identifier = "procedure_pointer",
+                            .type =
+                                as::ProcedureSignature{
+                                    .arguments = {
+                                    },
+                                    .return_type = as::SimpleType{"void"},
+                                },
+                            .init_expression = as::IsNull{},
+                        },
+                        as::Declaration{
+                            .identifier = "array_of_procedure_pointers",
+                            .type =
+                                as::ArrayType{
+                                    .length_expression = as::Literal{.int_value = 10},
+                                    .element_type = as::ProcedureSignature{
+                                        .arguments = {
+                                        },
+                                        .return_type = as::SimpleType{"void"},
+                                    },
+                                },
+                            .init_expression = as::IsNull{},
+                        },
+                    }},
+    }(parse_program_and_get_main(source));
 }
 
 TEST_CASE("Program", "[parse]")
@@ -669,7 +810,7 @@ Comment
 
 // Single line comment
 
-f := proc(a: i64, b: i64) {
+f := proc(a: i64, b: i64) void {
     if a == 1 {
         return a * (b + 2) >> 2
     } else {
@@ -677,7 +818,7 @@ f := proc(a: i64, b: i64) {
     }
 }
 
-main := proc() {
+main := proc() void {
     x := f(3, 4)
 }
 

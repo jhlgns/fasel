@@ -4,8 +4,6 @@
 #include "lex.h"
 #include <vector>
 
-// TODO: Remove all compiler information from the AST nodes and put them into a separate node hierarchy
-
 enum class AstKind
 {
     binary_operator,
@@ -20,6 +18,8 @@ enum class AstKind
     program,
     return_statement,
     simple_type,
+    pointer_type,
+    array_type,
 };
 
 inline const char *to_string(AstKind kind)
@@ -38,6 +38,8 @@ inline const char *to_string(AstKind kind)
         case AstKind::program:             return "program";
         case AstKind::return_statement:    return "return_statement";
         case AstKind::simple_type:         return "simple_type";
+        case AstKind::pointer_type:        return "pointer_type";
+        case AstKind::array_type:          return "array_type";
     }
 
     assert(false);
@@ -96,20 +98,25 @@ TNode *ast_cast(AstNode *node)
 
 struct AstSimpleType : AstHelper<AstKind::simple_type>
 {
-    Token identifier;  // TODO: Pointers, arrays, ...
+    Token identifier{};
+};
+
+struct AstPointerType : AstHelper<AstKind::pointer_type>
+{
+    AstNode *target_type{};
+};
+
+struct AstArrayType : AstHelper<AstKind::simple_type>
+{
+    AstNode *length_expression{};
+    AstNode *element_type{};
 };
 
 struct AstDeclaration : AstHelper<AstKind::declaration>
 {
     Token identifier{};
-    AstNode *type;
+    AstNode *type{};
     AstNode *init_expression{};
-
-    // Compiler information
-    bool is_proc_arg{};
-    struct AstProcedure *enclosing_proc{};
-    int64_t address{};  // Global declaration: address inside the program
-                        // Local declaration (procedure): offset from procedure stack base
 };
 
 struct AstBinaryOperator : AstHelper<AstKind::binary_operator>
@@ -132,6 +139,7 @@ struct AstLiteral : public AstHelper<AstKind::literal>
 struct AstProcedureSignature : public AstHelper<AstKind::procedure_signature>
 {
     std::vector<AstDeclaration> arguments{};
+    AstNode *return_type;
 };
 
 struct AstBlock : public AstHelper<AstKind::block>

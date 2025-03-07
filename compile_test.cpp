@@ -174,11 +174,12 @@ void require_allocation(
     {
         SECTION(std::format("The address of {} must be {}", name, expected_location))
         {
-            auto it = all_decls.find(name);
-            REQUIRE(it != all_decls.end());
+            UNREACHED;  // TODO
+            // auto it = all_decls.find(name);
+            // REQUIRE(it != all_decls.end());
 
-            auto decl = it->second;
-            REQUIRE(decl->address == expected_location);
+            // auto decl = it->second;
+            // REQUIRE(decl->address == expected_location);
         };
     }
 }

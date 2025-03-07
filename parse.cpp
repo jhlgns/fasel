@@ -25,21 +25,21 @@ struct Parser
         return result;
     }
 
-    void error(const Parser *start, std::string_view error) const
+    void error(const Parser &start, std::string_view error) const
     {
         if (this->error_context == nullptr)
         {
             return;
         }
 
-        auto current_token = start->peek_token();
+        auto current_token = start.peek_token();
 
-        auto line = get_line(start->lexer.source, current_token.pos.at);
+        auto line = get_line(start.lexer.source, current_token.pos.at);
 
         auto message = std::format(
             "Parser error at {}:{}\n{}\n{}",
-            start->lexer.cursor.line,
-            start->lexer.cursor.line_offset,
+            start.lexer.cursor.line,
+            start.lexer.cursor.line_offset,
             line,
             error);
 
@@ -67,7 +67,7 @@ struct Parser
         auto t = p.next_token();
         if (t.type != type)
         {
-            this->error(&start, std::format("Expected {}, got {} ({})", to_string(type), to_string(t.type), t.text()));
+            this->error(start, std::format("Expected {}, got {} ({})", to_string(type), to_string(t.type), t.text()));
             return start;
         }
 
@@ -89,7 +89,7 @@ struct Parser
         auto t = p.next_token();
         if (t.type != Tt::keyword)
         {
-            this->error(&start, std::format("Expected keyword '{}', got '{}'", keyword, to_string(t.type)));
+            this->error(start, std::format("Expected keyword '{}', got '{}'", keyword, to_string(t.type)));
             return start;
         }
 
@@ -100,7 +100,7 @@ struct Parser
         }
         if (strncmp(t.pos.at, keyword.data(), len) != 0)
         {
-            p.error(&start, std::format("Expected keyword '{}', got '{}'", keyword, to_string(t.type)));
+            p.error(start, std::format("Expected keyword '{}', got '{}'", keyword, to_string(t.type)));
             return start;
         }
 
@@ -125,6 +125,7 @@ struct Parser
 Parser parse_expr(Parser p, AstNode *&out_expr);
 Parser parse_decl(Parser p, AstDeclaration &out_decl);
 Parser parse_block(Parser p, AstBlock &out_block);
+Parser parse_type(Parser p, AstNode *&out_type);
 
 Parser parse_statement(Parser p, AstNode *&out_statement)
 {
@@ -198,7 +199,7 @@ Parser parse_statement(Parser p, AstNode *&out_statement)
         return p;
     }
 
-    p.error(&start, "Failed to parse statement");
+    p.error(start, "Failed to parse statement");
 
     return start;
 }
@@ -240,7 +241,7 @@ Parser parse_block(Parser p, AstBlock &out_block)
     return p;
 }
 
-Parser parse_proc(Parser p, AstProcedure &out_proc)
+Parser parse_proc_signature(Parser p, AstProcedureSignature &out_signature)
 {
     auto start = p;
 
@@ -249,7 +250,7 @@ Parser parse_proc(Parser p, AstProcedure &out_proc)
         return start;
     }
 
-    p.arm("parsing procedure");
+    p.arm("parsing procedure signature");
 
     if (!(p >>= p.parse_token(Tt::parenthesis_open)))
     {
@@ -279,13 +280,34 @@ Parser parse_proc(Parser p, AstProcedure &out_proc)
             return start;
         }
 
-        out_proc.signature.arguments.push_back(std::move(arg));
+        out_signature.arguments.push_back(std::move(arg));
 
         if (!(p >>= p.quiet().parse_token(Tt::comma)))
         {
             require_close = true;
         }
     }
+
+    // NOTE: Could be optional?
+    if (!(p >>= parse_type(p, out_signature.return_type)))
+    {
+        p.error(start, "failed to parse return type");
+        return start;
+    }
+
+    return p;
+}
+
+Parser parse_proc(Parser p, AstProcedure &out_proc)
+{
+    auto start = p;
+
+    if (!(p >>= parse_proc_signature(p.quiet(), out_proc.signature)))
+    {
+        return start;
+    }
+
+    p.arm("parsing procedure");
 
     out_proc.body.is_proc_body = true;
     if (!(p >>= parse_block(p, out_proc.body)))
@@ -321,13 +343,13 @@ Parser parse_primary_expr(Parser p, AstNode *&out_primary_expr)
 
         if (result.ec != std::errc{})
         {
-            p.error(&start, "Failed to parse integer literal");
+            p.error(start, "Failed to parse integer literal");
             return start;
         }
 
         if (result.ptr != t.pos.at + t.len)
         {
-            p.error(&start, "Failed to parse integer literal");
+            p.error(start, "Failed to parse integer literal");
             return start;
         }
 
@@ -369,7 +391,7 @@ Parser parse_primary_expr(Parser p, AstNode *&out_primary_expr)
         return p;
     }
 
-    p.error(&start, "Failed to parse primary expression");
+    p.error(start, "Failed to parse primary expression");
 
     return start;
 }
@@ -420,7 +442,7 @@ Parser parse_expression_suffix(Parser p, AstNode *lhs, AstNode **node)
         return p;
     }
 
-    p.error(&start, "Failed to parse suffix expression");
+    p.error(start, "Failed to parse suffix expression");
 
     return start;
 }
@@ -479,7 +501,7 @@ Parser parse_type(Parser p, AstNode *&out_type)
     auto start = p;
 
     Token identifier;
-    if (p >>= p.parse_token(Tt::identifier, &identifier))
+    if (p >>= p.quiet().parse_token(Tt::identifier, &identifier))
     {
         auto type        = new AstSimpleType{};
         type->identifier = identifier;
@@ -489,7 +511,52 @@ Parser parse_type(Parser p, AstNode *&out_type)
         return p;
     }
 
-    // TODO: Pointer types, array types...
+    if (p >>= p.quiet().parse_token(Tt::asterisk))
+    {
+        AstPointerType type{};
+        if (!(p >>= parse_type(p, type.target_type)))
+        {
+            return start;
+        }
+
+        out_type = new AstPointerType{std::move(type)};
+
+        return p;
+    }
+
+    if (p >>= p.quiet().parse_token(Tt::bracket_open))
+    {
+        AstArrayType type{};
+
+        // TODO: Could be empty or '..'
+        if (!(p >>= parse_expr(p, type.length_expression)))
+        {
+            return start;
+        }
+
+        if (!(p >>= p.parse_token(Tt::bracket_close)))
+        {
+            return start;
+        }
+
+        if (!(p >>= parse_type(p, type.element_type)))
+        {
+            return start;
+        }
+
+        out_type = new AstArrayType{std::move(type)};
+
+        return p;
+    }
+
+    AstProcedureSignature signature{};
+    if (p >>= parse_proc_signature(p.quiet(), signature))
+    {
+        out_type = new AstProcedureSignature{std::move(signature)};
+        return p;
+    }
+
+    p.error(start, "Failed to parse type");
 
     return start;
 }
@@ -521,7 +588,7 @@ Parser parse_decl(Parser p, AstDeclaration &out_decl)
     }
     else if (has_type == false)
     {
-        p.error(&start, "Declaration without init expression needs a type");
+        p.error(start, "Declaration without init expression needs a type");
     }
 
     return p;
