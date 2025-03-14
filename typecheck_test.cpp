@@ -22,10 +22,13 @@ TEST_CASE("Integer literals", "[typecheck]")
     }
 }
 
-TEST_CASE("Integer binary operators", "[typecheck]")
+TEST_CASE("Basic type checking", "[typecheck]")
 {
     std::tuple<AstNode *, const Node *> test_cases[] = {
+        // Literals
         {make_int_literal(1), &BuiltinTypes::i64},
+        {make_int_literal(1, 'u'), &BuiltinTypes::u64},
+        {make_bool_literal(false), &BuiltinTypes::boolean},
 
         // Arithmetic operators
         {make_binary_operator(Tt::plus, make_int_literal(1), make_int_literal(2)), &Types::i64},
@@ -92,6 +95,122 @@ TEST_CASE("Integer binary operators", "[typecheck]")
     }
 }
 
+TEST_CASE("Identifiers - declared in parent block", "[typecheck]")
+{
+    BlockNode parent_block{};
+
+    auto decl              = new DeclarationNode{};
+    decl->containing_block = &parent_block;
+    decl->identifier       = "x";
+    decl->specified_type   = const_cast<SimpleTypeNode *>(&Types::u8);  // TODO
+    decl->init_expression  = new NopNode{};
+    parent_block.statements.push_back(decl);
+
+    REQUIRE(typecheck(decl));
+
+    BlockNode child_block{};
+    child_block.containing_block = &parent_block;
+
+    {
+        IdentifierNode identifier{};
+        identifier.containing_block = &child_block;
+        identifier.identifier       = "x";
+
+        REQUIRE(typecheck(&identifier));
+        REQUIRE(types_equal(identifier.type, &Types::u8));
+    }
+
+    {
+        IdentifierNode identifier{};
+        identifier.containing_block = &child_block;
+        identifier.identifier       = "y";
+
+        REQUIRE(typecheck(&identifier) == false);
+    }
+}
+
+TEST_CASE("Identifiers - uninitialized, with explicit type", "[typecheck]")
+{
+    BlockNode block{};
+
+    auto decl              = new DeclarationNode{};
+    decl->containing_block = &block;
+    decl->identifier       = "x";
+    decl->specified_type   = const_cast<SimpleTypeNode *>(&Types::u8);  // TODO
+    decl->init_expression  = new NopNode{};
+    block.statements.push_back(decl);
+
+    REQUIRE(typecheck(decl));
+
+    {
+        IdentifierNode identifier{};
+        identifier.containing_block = &block;
+        identifier.identifier       = "x";
+
+        REQUIRE(typecheck(&identifier));
+        REQUIRE(types_equal(identifier.type, &Types::u8));
+    }
+
+    {
+        IdentifierNode identifier{};
+        identifier.containing_block = &block;
+        identifier.identifier       = "y";
+
+        REQUIRE(typecheck(&identifier) == false);
+    }
+}
+
+TEST_CASE("Identifiers - initialized, without explicit type", "[typecheck]")
+{
+    BlockNode block{};
+
+    LiteralNode init_expression{};
+    init_expression.value.emplace<bool>(true);
+
+    auto decl              = new DeclarationNode{};
+    decl->containing_block = &block;
+    decl->identifier       = "x";
+    decl->specified_type   = new NopNode{};
+    decl->init_expression  = &init_expression;
+    block.statements.push_back(decl);
+
+    REQUIRE(typecheck(decl));
+
+    {
+        IdentifierNode identifier{};
+        identifier.containing_block = &block;
+        identifier.identifier       = "x";
+
+        REQUIRE(typecheck(&identifier));
+        REQUIRE(types_equal(identifier.type, &Types::boolean));
+    }
+
+    {
+        IdentifierNode identifier{};
+        identifier.containing_block = &block;
+        identifier.identifier       = "y";
+
+        REQUIRE(typecheck(&identifier) == false);
+    }
+}
+
+TEST_CASE("Declarations - initialized, with different explicit type", "[typecheck]")
+{
+    BlockNode block{};
+
+    LiteralNode init_expression{};
+    init_expression.value.emplace<bool>(true);
+
+    auto decl              = new DeclarationNode{};
+    decl->containing_block = &block;
+    decl->identifier       = "x";
+    decl->specified_type   = const_cast<SimpleTypeNode *>(&Types::i8);  // TODO
+    decl->init_expression  = &init_expression;
+    block.statements.push_back(decl);
+
+    REQUIRE(typecheck(decl) == false);
+}
+
 TEST_CASE("Integer binary operator type coercion", "[typecheck]")
 {
     BlockNode block;
@@ -101,8 +220,8 @@ TEST_CASE("Integer binary operator type coercion", "[typecheck]")
     lhs.value.emplace<uint64_t>(1);
 
     LiteralNode rhs{};
-    lhs.type = &Types::i64;
-    lhs.value.emplace<uint64_t>(2);
+    rhs.type = &Types::i64;
+    rhs.value.emplace<uint64_t>(2);
 
     auto node = make_node(&block, make_binary_operator(Tt::plus, make_int_literal(1), make_int_literal(2)));
     REQUIRE(typecheck(node));

@@ -77,9 +77,9 @@ DeclarationNode *BlockNode::find_declaration(std::string_view name) const
         }
     }
 
-    if (this->parent_block != nullptr)
+    if (this->containing_block != nullptr)
     {
-        return this->parent_block->find_declaration(name);
+        return this->containing_block->find_declaration(name);
     }
 
     return nullptr;
@@ -117,8 +117,7 @@ Node *make_node_internal(BlockNode *containing_block, AstNode *ast)
         {
             auto block = static_cast<AstBlock *>(ast);
 
-            auto result          = new BlockNode{};
-            result->parent_block = containing_block;
+            auto result = new BlockNode{};
 
             for (auto statement : block->statements)
             {
@@ -136,7 +135,13 @@ Node *make_node_internal(BlockNode *containing_block, AstNode *ast)
             auto result        = new DeclarationNode{};
             result->identifier = decl->identifier.text();
 
-            if (decl->type != nullptr)
+            if (decl->type == nullptr)
+            {
+                auto nop               = new NopNode{};
+                nop->containing_block  = containing_block;
+                result->specified_type = nop;
+            }
+            else
             {
                 result->specified_type = make_node(containing_block, decl->type);
             }
@@ -509,8 +514,14 @@ bool typecheck(Node *node)
                 return false;
             }
 
-            if (decl->specified_type != nullptr)
+            if (decl->specified_type->kind != NodeKind::nop)
             {
+                if (decl->init_expression->kind == NodeKind::nop)
+                {
+                    assert(decl->specified_type != nullptr);
+                    decl->init_expression->type = decl->specified_type;
+                }
+
                 if (types_equal(decl->specified_type, decl->init_expression->type) == false)
                 {
                     type_error(
@@ -526,7 +537,7 @@ bool typecheck(Node *node)
         case NodeKind::identifier:
         {
             auto ident = static_cast<IdentifierNode *>(node);
-            auto decl  = ident->containing_block->containing_block->find_declaration(ident->identifier);
+            auto decl  = ident->containing_block->find_declaration(ident->identifier);
 
             if (decl == nullptr)
             {
@@ -534,7 +545,7 @@ bool typecheck(Node *node)
                 return false;
             }
 
-            // TODO: Use before declare should lead to this error that should be caught
+            // TODO: Use before declare should lead to this error, which should be caught
             assert(decl->init_expression->type != nullptr);
 
             ident->type = decl->init_expression->type;
@@ -639,8 +650,8 @@ bool typecheck(Node *node)
 
         case NodeKind::nop:
         {
-            // TODO
-            UNREACHED;
+            node->type = node;
+            return true;
         }
     }
 

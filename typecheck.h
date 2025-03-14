@@ -117,12 +117,11 @@ struct BinaryOperatorNode : NodeOfKind<NodeKind::binary_operator>
 struct BlockNode : NodeOfKind<NodeKind::block>
 {
     std::vector<Node *> statements{};
-    BlockNode *parent_block{};
     int64_t offset_from_parent_block{};
     int64_t memory_size{};  // Size of all local variables
     // int64_t memory_size_of_args{};  // Size of all procedure arguments
 
-    inline bool is_global() const { return this->parent_block == nullptr; }
+    inline bool is_global() const { return this->containing_block == nullptr; }
 
     struct DeclarationNode *find_declaration(std::string_view name) const;
 };
