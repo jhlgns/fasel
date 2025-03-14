@@ -1,5 +1,4 @@
 #include "parse.h"
-#include "stringify.h"
 #include <catch2/catch_test_macros.hpp>
 
 namespace assertions
@@ -139,7 +138,7 @@ namespace assertions
     struct Literal
     {
         std::optional<Token> token;
-        std::optional<LiteralType> type;
+        // std::optional<LiteralType> type;
         std::optional<int64_t> int_value;
 
         void operator()(AstNode *node)
@@ -152,14 +151,16 @@ namespace assertions
                 this->token.value()(literal->token);
             }
 
-            if (this->type.has_value())
-            {
-                REQUIRE(this->type.value() == literal->type);
-            }
+            // if (this->type.has_value())
+            // {
+            //     REQUIRE(this->type.value() == literal->type);
+            // }
 
             if (this->int_value.has_value())
             {
-                REQUIRE(this->int_value.value() == literal->signed_integer_value);
+                REQUIRE(std::holds_alternative<uint64_t>(literal->value));
+                auto literal_int_value = std::get<uint64_t>(literal->value);
+                REQUIRE(this->int_value.value() == literal_int_value);
             }
         }
     };

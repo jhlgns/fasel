@@ -21,7 +21,7 @@
             "program": "${workspaceFolder}/build/tests",
             // "args": ["Procedure calling with arguments"],
             // "args": ["[string_util]"],
-            "args": ["[parse]"],
+            "args": ["[typecheck]"],
             "cwd": "${workspaceFolder}/build"
         }
     ]

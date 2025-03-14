@@ -201,6 +201,11 @@ Token Lexer::next_token()
     }
     if (this->cursor.at > start.at)
     {
+        if (*this->cursor.at == 'u')
+        {
+            next(this->cursor);
+        }
+
         return emit(*this, start, Tt::numerical_literal);
     }
 

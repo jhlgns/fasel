@@ -1,9 +1,13 @@
 #pragma once
 
+#include "basics.h"
 #include "lex.h"
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+
+struct AstNode;
+struct BlockNode;
 
 enum class NodeKind
 {
@@ -11,7 +15,7 @@ enum class NodeKind
     block,
     declaration,
     identifier,
-    if_branch,
+    if_statement,
     literal,
     procedure,
     procedure_call,
@@ -19,48 +23,17 @@ enum class NodeKind
     program,
     return_statement,
     simple_type,
-};
-
-struct Type
-{
-    enum class Kind
-    {
-        unchecked,
-        voyd,
-        boolean,
-        integer,
-        floatingpoint,
-        strukt,
-    };
-
-    Kind kind{};
-    int64_t size = -1;
-    bool is_signed{};
-
-    inline bool is_valid() const { return this->size > 0 || this->kind == Kind::voyd; }
-    inline bool is_numerical() const { return this->kind == Kind::integer || this->kind == Kind::floatingpoint; }
-
-    auto operator<=>(const Type &) const = default;
-};
-
-struct BuiltinTypes
-{
-    constexpr static Type voyd    = Type{.kind = Type::Kind::voyd};
-    constexpr static Type i64     = Type{.kind = Type::Kind::integer, .size = 8, .is_signed = true};
-    constexpr static Type i32     = Type{.kind = Type::Kind::integer, .size = 4, .is_signed = true};
-    constexpr static Type i16     = Type{.kind = Type::Kind::integer, .size = 2, .is_signed = true};
-    constexpr static Type i8      = Type{.kind = Type::Kind::integer, .size = 1, .is_signed = true};
-    constexpr static Type u64     = Type{.kind = Type::Kind::integer, .size = 8, .is_signed = false};
-    constexpr static Type u32     = Type{.kind = Type::Kind::integer, .size = 4, .is_signed = false};
-    constexpr static Type u16     = Type{.kind = Type::Kind::integer, .size = 2, .is_signed = false};
-    constexpr static Type u8      = Type{.kind = Type::Kind::integer, .size = 1, .is_signed = false};
-    constexpr static Type boolean = Type{.kind = Type::Kind::boolean, .size = 1};
+    pointer_type,
+    array_type,
+    struct_type,
+    nop,
 };
 
 struct Node
 {
     NodeKind kind{};
-    Type type{};
+    const Node *type{};  // (type != nullptr) == (node is an expression)
+    const BlockNode *containing_block{};
 
     explicit Node(NodeKind kind)
         : kind{kind}
@@ -71,41 +44,77 @@ struct Node
 };
 
 
-template<typename TNode>
+template<typename TNode, bool required = false>
 TNode *node_cast(Node *node)
 {
     if (node == nullptr)
     {
+        if constexpr (required)
+        {
+            FATAL("node_cast passed nullptr");
+        }
+
         return nullptr;
     }
 
     if (node->kind != TNode::kind)
     {
+        if constexpr (required)
+        {
+            FATAL("node_cast passed invalid kind");
+        }
+
         return nullptr;
     }
 
     return static_cast<TNode *>(node);
 }
 
+template<typename TNode, bool required = false>
+const TNode *node_cast(const Node *node)
+{
+    if (node == nullptr)
+    {
+        if constexpr (required)
+        {
+            FATAL("node_cast passed nullptr");
+        }
+
+        return nullptr;
+    }
+
+    if (node->kind != TNode::kind)
+    {
+        if constexpr (required)
+        {
+            FATAL("node_cast passed invalid kind");
+        }
+
+        return nullptr;
+    }
+
+    return static_cast<const TNode *>(node);
+}
+
 template<NodeKind the_kind>
-struct NodeHelper : Node
+struct NodeOfKind : Node
 {
     constexpr static NodeKind kind = the_kind;
 
-    NodeHelper()
+    NodeOfKind()
         : Node(the_kind)
     {
     }
 };
 
-struct BinaryOperatorNode : NodeHelper<NodeKind::binary_operator>
+struct BinaryOperatorNode : NodeOfKind<NodeKind::binary_operator>
 {
     TokenType operator_type{};
     Node *lhs{};
     Node *rhs{};
 };
 
-struct BlockNode : public NodeHelper<NodeKind::block>
+struct BlockNode : NodeOfKind<NodeKind::block>
 {
     std::vector<Node *> statements{};
     BlockNode *parent_block{};
@@ -115,33 +124,124 @@ struct BlockNode : public NodeHelper<NodeKind::block>
 
     inline bool is_global() const { return this->parent_block == nullptr; }
 
-    struct DeclarationNode *find_declaration(std::string_view name);
+    struct DeclarationNode *find_declaration(std::string_view name) const;
 };
 
-struct DeclarationNode : NodeHelper<NodeKind::declaration>
+struct DeclarationNode : NodeOfKind<NodeKind::declaration>
 {
     std::string_view identifier;
+    Node *specified_type;
     Node *init_expression;
 };
 
-struct IdentifierNode : NodeHelper<NodeKind::identifier>
+struct IdentifierNode : NodeOfKind<NodeKind::identifier>
 {
     std::string_view identifier;
 };
 
-struct IfNode : NodeHelper<NodeKind::identifier>
+struct IfNode : NodeOfKind<NodeKind::identifier>
 {
     Node *condition;
     BlockNode *then_block;
     BlockNode *else_block;
 };
 
-struct LiteralNode : NodeHelper<NodeKind::literal>
+struct LiteralNode : NodeOfKind<NodeKind::literal>
 {
-    int64_t signed_integer_value{};
-    uint64_t unsigned_integer_value{};  // TODO: Parse
-    float float_value{};  // TODO: Parse
-    double double_value{};  // TODO: Parse
+    std::variant<uint64_t, float, double> value;
+    char suffix{};
 };
 
-Node *typecheck(BlockNode *containing_block, struct AstNode *ast);
+struct ProcedureSignatureNode : NodeOfKind<NodeKind::procedure_signature>
+{
+    std::vector<DeclarationNode *> arguments{};
+    Node *return_type;
+};
+
+struct ProcedureNode : NodeOfKind<NodeKind::procedure>
+{
+    ProcedureSignatureNode *signature{};
+    BlockNode *body{};
+};
+
+struct ProcedureCallNode : NodeOfKind<NodeKind::procedure_call>
+{
+    Node *procedure{};
+    std::vector<Node *> arguments{};
+};
+
+struct ReturnNode : NodeOfKind<NodeKind::return_statement>
+{
+    Node *expression;
+};
+
+struct SimpleTypeNode : NodeOfKind<NodeKind::simple_type>
+{
+    enum class Kind
+    {
+        invalid,
+        voyd,
+        boolean,
+        signed_integer,
+        unsigned_integer,
+        floatingpoint,
+        type,  // This is the kind of all types themselves
+    };
+
+    explicit SimpleTypeNode(Kind type_kind, int64_t size)
+        : type_kind{type_kind}
+        , size{size}
+    {
+    }
+
+    Kind type_kind{};
+    int64_t size = -1;
+
+    inline bool is_numerical() const
+    {
+        return this->type_kind == Kind::signed_integer || this->type_kind == Kind::unsigned_integer ||
+               this->type_kind == Kind::floatingpoint;
+    }
+};
+
+struct PointerTypeNode : NodeOfKind<NodeKind::pointer_type>
+{
+    Node *target_type;
+};
+
+struct ArrayTypeNode : NodeOfKind<NodeKind::array_type>
+{
+    Node *length_expression;
+    Node *element_type;
+};
+
+struct StructTypeNode : NodeOfKind<NodeKind::struct_type>
+{
+    // TODO
+};
+
+// This node is implicitly created for optional expressions that have been omitted in the program
+// (like the init expression of a local variable)
+struct NopNode : NodeOfKind<NodeKind::nop>
+{
+};
+
+bool types_equal(const Node *lhs, const Node *rhs);
+
+struct BuiltinTypes
+{
+    static const SimpleTypeNode voyd;
+    static const SimpleTypeNode i64;
+    static const SimpleTypeNode i32;
+    static const SimpleTypeNode i16;
+    static const SimpleTypeNode i8;
+    static const SimpleTypeNode u64;
+    static const SimpleTypeNode u32;
+    static const SimpleTypeNode u16;
+    static const SimpleTypeNode u8;
+    static const SimpleTypeNode boolean;
+    static const SimpleTypeNode type;
+};
+
+Node *make_node(BlockNode *containing_block, AstNode *ast);
+[[nodiscard]] bool typecheck(Node *node);

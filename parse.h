@@ -10,7 +10,7 @@ enum class AstKind
     block,
     declaration,
     identifier,
-    if_branch,
+    if_statement,
     literal,
     procedure,
     procedure_call,
@@ -30,7 +30,7 @@ inline const char *to_string(AstKind kind)
         case AstKind::block:               return "block";
         case AstKind::declaration:         return "declaration";
         case AstKind::identifier:          return "identifier";
-        case AstKind::if_branch:           return "if_branch";
+        case AstKind::if_statement:        return "if_statement";
         case AstKind::literal:             return "literal";
         case AstKind::procedure:           return "procedure";
         case AstKind::procedure_call:      return "procedure_call";
@@ -45,15 +45,14 @@ inline const char *to_string(AstKind kind)
     assert(false);
 }
 
-enum class LiteralType
-{
-    none,
-    signed_integer,
-    unsigned_integer,
-    float32,
-    float64,
-    string,
-};
+// enum class LiteralType
+// {
+//     none,
+//     integer,
+//     float32,
+//     float64,
+//     string,
+// };
 
 struct AstNode
 {
@@ -70,11 +69,11 @@ struct AstNode
 };
 
 template<AstKind the_kind>
-struct AstHelper : AstNode
+struct AstOfKind : AstNode
 {
     constexpr static AstKind kind = the_kind;
 
-    AstHelper()
+    AstOfKind()
         : AstNode(kind)
     {
     }
@@ -96,88 +95,85 @@ TNode *ast_cast(AstNode *node)
     return static_cast<TNode *>(node);
 }
 
-struct AstSimpleType : AstHelper<AstKind::simple_type>
+struct AstSimpleType : AstOfKind<AstKind::simple_type>
 {
     Token identifier{};
 };
 
-struct AstPointerType : AstHelper<AstKind::pointer_type>
+struct AstPointerType : AstOfKind<AstKind::pointer_type>
 {
     AstNode *target_type{};
 };
 
-struct AstArrayType : AstHelper<AstKind::simple_type>
+struct AstArrayType : AstOfKind<AstKind::simple_type>
 {
     AstNode *length_expression{};
     AstNode *element_type{};
 };
 
-struct AstDeclaration : AstHelper<AstKind::declaration>
+struct AstDeclaration : AstOfKind<AstKind::declaration>
 {
     Token identifier{};
     AstNode *type{};
     AstNode *init_expression{};
 };
 
-struct AstBinaryOperator : AstHelper<AstKind::binary_operator>
+struct AstBinaryOperator : AstOfKind<AstKind::binary_operator>
 {
     TokenType type{};
     AstNode *lhs{};
     AstNode *rhs{};
 };
 
-struct AstLiteral : public AstHelper<AstKind::literal>
+struct AstLiteral : AstOfKind<AstKind::literal>
 {
     Token token{};
-    LiteralType type{};
-    int64_t signed_integer_value{};
-    uint64_t unsigned_integer_value{};  // TODO: Parse
-    float float_value{};  // TODO: Parse
-    double double_value{};  // TODO: Parse
+    char suffix{};  // 'u' or 'f'
+    std::variant<uint64_t, float, double> value;
 };
 
-struct AstProcedureSignature : public AstHelper<AstKind::procedure_signature>
+struct AstProcedureSignature : AstOfKind<AstKind::procedure_signature>
 {
     std::vector<AstDeclaration> arguments{};
     AstNode *return_type;
 };
 
-struct AstBlock : public AstHelper<AstKind::block>
+struct AstBlock : AstOfKind<AstKind::block>
 {
     bool is_proc_body{};
     std::vector<AstNode *> statements{};
 };
 
-struct AstIf : public AstHelper<AstKind::if_branch>
+struct AstIf : AstOfKind<AstKind::if_statement>
 {
     AstNode *condition{};
     AstBlock then_block{};
     AstBlock *else_block{};
 };
 
-struct AstReturn : public AstHelper<AstKind::return_statement>
+struct AstReturn : AstOfKind<AstKind::return_statement>
 {
     AstNode *expression{};
 };
 
-struct AstIdentifier : public AstHelper<AstKind::identifier>
+struct AstIdentifier : AstOfKind<AstKind::identifier>
 {
     Token identifier{};
 };
 
-struct AstProcedure : public AstHelper<AstKind::procedure>
+struct AstProcedure : AstOfKind<AstKind::procedure>
 {
     AstProcedureSignature signature{};
     AstBlock body{};
 };
 
-struct AstProcedureCall : public AstHelper<AstKind::procedure_call>
+struct AstProcedureCall : AstOfKind<AstKind::procedure_call>
 {
     AstNode *procedure{};
     std::vector<AstNode *> arguments{};
 };
 
-struct AstProgram : public AstHelper<AstKind::program>
+struct AstProgram : AstOfKind<AstKind::program>
 {
     AstBlock block{};
 };

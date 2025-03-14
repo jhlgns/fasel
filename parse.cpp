@@ -329,17 +329,28 @@ Parser parse_primary_expr(Parser p, AstNode *&out_primary_expr)
 
         AstLiteral literal{};
         literal.token = t;
-        literal.type  = LiteralType::signed_integer;  // TODO
 
+        auto begin  = t.pos.at;
+        auto end    = t.pos.at + t.len;
+        auto base   = 10;
+        auto suffix = '\0';
         std::from_chars_result result;
-        if (t.pos.at[0] == '0' && t.pos.at[1] == 'x')
+
+        auto is_hex = t.pos.at[0] == '0' && t.pos.at[1] == 'x';
+        if (is_hex)
         {
-            result = std::from_chars(t.pos.at + 2, t.pos.at + t.len, literal.signed_integer_value, 16);
+            begin += 2;
+            base = 16;
         }
-        else
+
+        if (*end == 'u' || *end == 'f')
         {
-            result = std::from_chars(t.pos.at, t.pos.at + t.len, literal.signed_integer_value);
+            suffix = *end;
+            --end;
         }
+
+        uint64_t value;
+        result = std::from_chars(begin, end, value, base);
 
         if (result.ec != std::errc{})
         {
@@ -347,11 +358,14 @@ Parser parse_primary_expr(Parser p, AstNode *&out_primary_expr)
             return start;
         }
 
-        if (result.ptr != t.pos.at + t.len)
+        if (result.ptr != end)
         {
             p.error(start, "Failed to parse integer literal");
             return start;
         }
+
+        literal.value.emplace<uint64_t>(value);
+        literal.suffix = suffix;
 
         out_primary_expr = new AstLiteral{std::move(literal)};
         return p;
