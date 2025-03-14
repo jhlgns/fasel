@@ -34,6 +34,13 @@ TEST_CASE("Integer binary operators", "[typecheck]")
         {make_binary_operator(Tt::slash, make_int_literal(1), make_int_literal(2)), &Types::i64},
         {make_binary_operator(Tt::mod, make_int_literal(1), make_int_literal(2)), &Types::i64},
 
+        // Arithmetic operators - differing signedness
+        {make_binary_operator(Tt::plus, make_int_literal(1, 'u'), make_int_literal(2)), nullptr},
+        {make_binary_operator(Tt::minus, make_int_literal(1), make_int_literal(2, 'u')), nullptr},
+        {make_binary_operator(Tt::asterisk, make_int_literal(1), make_int_literal(2, 'u')), nullptr},
+        {make_binary_operator(Tt::slash, make_int_literal(1), make_int_literal(2, 'u')), nullptr},
+        {make_binary_operator(Tt::mod, make_int_literal(1, 'u'), make_int_literal(2)), nullptr},
+
         // Bitwise operators
         {make_binary_operator(Tt::left_shift, make_int_literal(1, 'u'), make_int_literal(2, 'u')), &Types::u64},
         {make_binary_operator(Tt::right_shift, make_int_literal(1, 'u'), make_int_literal(2, 'u')), &Types::u64},
@@ -49,6 +56,8 @@ TEST_CASE("Integer binary operators", "[typecheck]")
         {make_binary_operator(Tt::bit_or, make_int_literal(1, '\0'), make_int_literal(2, '\0')), nullptr},
 
         // Boolean short circuit operators
+        {make_binary_operator(Tt::logical_or, make_bool_literal(true), make_int_literal(false)), &Types::boolean},
+        {make_binary_operator(Tt::logical_and, make_bool_literal(false), make_int_literal(true)), &Types::boolean},
         {make_binary_operator(Tt::logical_or, make_int_literal(1), make_int_literal(2)), nullptr},
         {make_binary_operator(Tt::logical_and, make_int_literal(1), make_int_literal(2)), nullptr},
 

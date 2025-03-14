@@ -322,21 +322,21 @@ Parser parse_primary_expr(Parser p, AstNode *&out_primary_expr)
 {
     auto start = p;
 
-    Token t;
-    if (p >>= p.quiet().parse_token(Tt::numerical_literal, &t))
+    Token token{};
+    if (p >>= p.quiet().parse_token(Tt::numerical_literal, &token))
     {
         p.arm("parsing number literal");
 
         AstLiteral literal{};
-        literal.token = t;
+        literal.token = token;
 
-        auto begin  = t.pos.at;
-        auto end    = t.pos.at + t.len;
+        auto begin  = token.pos.at;
+        auto end    = token.pos.at + token.len;
         auto base   = 10;
         auto suffix = '\0';
         std::from_chars_result result;
 
-        auto is_hex = t.pos.at[0] == '0' && t.pos.at[1] == 'x';
+        auto is_hex = token.pos.at[0] == '0' && token.pos.at[1] == 'x';
         if (is_hex)
         {
             begin += 2;
@@ -371,11 +371,30 @@ Parser parse_primary_expr(Parser p, AstNode *&out_primary_expr)
         return p;
     }
 
-    if (p >>= p.quiet().parse_token(Tt::identifier, &t))
+    if (p >>= p.quiet().parse_token(Tt::identifier, &token))
     {
         auto ident        = new AstIdentifier{};
-        ident->identifier = t;
+        ident->identifier = token;
         out_primary_expr  = ident;
+        return p;
+    }
+
+    if (p >>= p.quiet().parse_keyword("true"))
+    {
+        auto literal   = new AstLiteral{};
+        literal->token = token;
+        literal->value.emplace<bool>(true);
+
+        out_primary_expr = literal;
+        return p;
+    }
+    else if (p >>= p.quiet().parse_keyword("false"))
+    {
+        auto literal   = new AstLiteral{};
+        literal->token = token;
+        literal->value.emplace<bool>(false);
+
+        out_primary_expr = literal;
         return p;
     }
 

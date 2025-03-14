@@ -148,7 +148,7 @@ struct IfNode : NodeOfKind<NodeKind::identifier>
 
 struct LiteralNode : NodeOfKind<NodeKind::literal>
 {
-    std::variant<uint64_t, float, double> value;
+    std::variant<uint64_t, float, double, bool> value;
     char suffix{};
 };
 

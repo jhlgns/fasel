@@ -129,7 +129,7 @@ struct AstLiteral : AstOfKind<AstKind::literal>
 {
     Token token{};
     char suffix{};  // 'u' or 'f'
-    std::variant<uint64_t, float, double> value;
+    std::variant<uint64_t, float, double, bool> value;
 };
 
 struct AstProcedureSignature : AstOfKind<AstKind::procedure_signature>

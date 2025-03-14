@@ -57,6 +57,13 @@ inline AstLiteral *make_int_literal(uint64_t value, char suffix = '\0')
     return result;
 }
 
+inline AstLiteral *make_bool_literal(bool value)
+{
+    auto result = new AstLiteral{};
+    result->value.emplace<bool>(value);
+    return result;
+}
+
 inline AstProcedure *make_procedure(AstProcedureSignature *signature, AstBlock *body)
 {
     auto result       = new AstProcedure{};

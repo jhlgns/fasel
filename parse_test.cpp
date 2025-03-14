@@ -140,6 +140,7 @@ namespace assertions
         std::optional<Token> token;
         // std::optional<LiteralType> type;
         std::optional<int64_t> int_value;
+        std::optional<bool> bool_value;
 
         void operator()(AstNode *node)
         {
@@ -161,6 +162,13 @@ namespace assertions
                 REQUIRE(std::holds_alternative<uint64_t>(literal->value));
                 auto literal_int_value = std::get<uint64_t>(literal->value);
                 REQUIRE(this->int_value.value() == literal_int_value);
+            }
+
+            if (this->bool_value.has_value())
+            {
+                REQUIRE(std::holds_alternative<bool>(literal->value));
+                auto literal_bool_value = std::get<bool>(literal->value);
+                REQUIRE(this->bool_value.value() == literal_bool_value);
             }
         }
     };
@@ -307,11 +315,26 @@ AstProcedure *parse_program_and_get_main(std::string_view source)
     return main;
 }
 
-TEST_CASE("Integer literals", "[parse]")
+enum class LiteralKind
 {
-    auto test_integer_literal = [](std::string_view literal_text, int64_t expected_value)
+    integer,
+    boolean,
+};
+TEST_CASE("Literals", "[parse]")
+{
+    auto test_literal = [](std::string_view literal_text, LiteralKind kind, int64_t expected_int, bool expected_bool)
     {
         auto source = std::format("main := proc() void {{ a := {} }}", literal_text);
+
+        auto literal = as::Literal{};
+        if (kind == LiteralKind::integer)
+        {
+            literal.int_value = expected_int;
+        }
+        else
+        {
+            literal.bool_value = expected_bool;
+        }
 
         as::Procedure{
             .signature = as::Nop{},
@@ -321,12 +344,15 @@ TEST_CASE("Integer literals", "[parse]")
                     as::Declaration{
                         .identifier      = "a",
                         .type            = as::IsNull{},
-                        .init_expression = as::Literal{.int_value = expected_value},
+                        .init_expression = literal,
                     },
                 }}}(parse_program_and_get_main(source));
     };
 
-#define CASE(literal) test_integer_literal(#literal, literal);
+    test_literal("true", LiteralKind::boolean, 0, true);
+    test_literal("false", LiteralKind::boolean, 0, false);
+
+#define CASE(literal) test_literal(#literal, LiteralKind::integer, literal, false);
     CASE(0);
     CASE(1);
     CASE(7);

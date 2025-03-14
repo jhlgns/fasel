@@ -558,23 +558,29 @@ bool typecheck(Node *node)
         {
             auto literal = static_cast<LiteralNode *>(node);
 
-            if (std::holds_alternative<uint64_t>(literal->value) == false)
+            if (std::holds_alternative<bool>(literal->value))
             {
-                // TODO
-                type_error(literal, "TODO: Currently only signed integer literals are supported in the type checker");
-                return false;
+                literal->type = &BuiltinTypes::boolean;
+                return true;
             }
 
-            if (literal->suffix == 'u')
+            if (std::holds_alternative<uint64_t>(literal->value))
             {
-                literal->type = &BuiltinTypes::u64;
-            }
-            else
-            {
-                literal->type = &BuiltinTypes::i64;
+                if (literal->suffix == 'u')
+                {
+                    literal->type = &BuiltinTypes::u64;
+                }
+                else
+                {
+                    literal->type = &BuiltinTypes::i64;
+                }
+
+                return true;
             }
 
-            return true;
+            // TODO
+            type_error(literal, "TODO: Currently only boolean and integer literals are supported in the type checker");
+            return false;
         }
 
         case NodeKind::procedure:
