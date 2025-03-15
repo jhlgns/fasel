@@ -257,3 +257,72 @@ TEST_CASE("Declarations - initialized, with different explicit type", "[typechec
 
     REQUIRE(typecheck(decl) == false);
 }
+
+TEST_CASE("Procedures", "[typecheck]")
+{
+    auto signature = new AstProcedureSignature{};
+    signature->arguments.push_back(*make_declaration("a", make_simple_type("i64"), make_int_literal(1)));
+    signature->arguments.push_back(*make_declaration("b", nullptr, make_float_literal(1.0f)));
+    signature->arguments.push_back(*make_declaration("c", make_simple_type("f64"), nullptr));
+    signature->return_type = make_simple_type("void");
+
+    auto proc = make_procedure(signature, make_block({}));
+
+    auto a                   = new DeclarationNode{};
+    a->init_expression       = new NopNode{};
+    a->init_expression->type = &Types::i64;
+    auto b                   = new DeclarationNode{};
+    b->init_expression       = new NopNode{};
+    b->init_expression->type = &Types::f32;
+    auto c                   = new DeclarationNode{};
+    c->init_expression       = new NopNode{};
+    c->init_expression->type = &Types::f64;
+
+    auto expected_type = new ProcedureSignatureNode{};
+    expected_type->arguments.push_back(a);
+    expected_type->arguments.push_back(b);
+    expected_type->arguments.push_back(c);
+    expected_type->return_type = const_cast<SimpleTypeNode *>(&Types::voyd);
+
+    test_type(proc, expected_type);
+}
+
+TEST_CASE("Procedure calls", "[typecheck]")
+{
+    auto signature = new AstProcedureSignature{};
+    signature->arguments.push_back(*make_declaration("a", make_simple_type("i64"), make_int_literal(1)));
+    signature->arguments.push_back(*make_declaration("b", nullptr, make_float_literal(1.0f)));
+    signature->arguments.push_back(*make_declaration("c", make_simple_type("f64"), nullptr));
+    signature->return_type = make_simple_type("void");
+
+    auto proc = make_procedure(signature, make_block({}));
+
+    SECTION("Not callable")
+    {
+        auto call = make_procedure_call(make_int_literal(1), {make_int_literal(123)});
+
+        test_type(call, nullptr);
+    }
+
+    SECTION("Wrong number of arguments")
+    {
+        auto call = make_procedure_call(proc, {make_int_literal(123)});
+
+        test_type(call, nullptr);
+    }
+
+    SECTION("Wrong argument types")
+    {
+        auto call = make_procedure_call(proc, {make_int_literal(123), make_int_literal(456), make_int_literal(789)});
+
+        test_type(call, nullptr);
+    }
+
+    SECTION("Correct call")
+    {
+        auto call =
+            make_procedure_call(proc, {make_int_literal(123), make_float_literal(456), make_double_literal(789)});
+
+        test_type(call, &Types::voyd);
+    }
+}

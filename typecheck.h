@@ -4,6 +4,7 @@
 #include "lex.h"
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <vector>
 
 struct AstNode;
@@ -226,6 +227,7 @@ struct NopNode : NodeOfKind<NodeKind::nop>
 };
 
 bool types_equal(const Node *lhs, const Node *rhs);
+std::string type_to_string(const Node *type);
 
 struct BuiltinTypes
 {
@@ -242,6 +244,8 @@ struct BuiltinTypes
     static const SimpleTypeNode f64;
     static const SimpleTypeNode boolean;
     static const SimpleTypeNode type;
+
+    static const std::vector<std::tuple<const Node *, std::string_view>> type_names;
 };
 
 Node *make_node(BlockNode *containing_block, AstNode *ast);

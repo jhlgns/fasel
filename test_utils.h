@@ -18,7 +18,7 @@ inline AstBlock *make_block(std::vector<AstNode *> &&statements)
     return result;
 }
 
-inline AstDeclaration *make_declaration(std::string_view identifier)
+inline AstDeclaration *make_declaration(std::string_view identifier, AstNode *specified_type, AstNode *init_expression)
 {
     auto result        = new AstDeclaration{};
     result->identifier = Token{
@@ -26,6 +26,8 @@ inline AstDeclaration *make_declaration(std::string_view identifier)
         .pos  = Cursor{.at = identifier.data(), .line = -1, .line_offset = -1},
         .len  = identifier.size(),
     };
+    result->type            = specified_type;
+    result->init_expression = init_expression;
     return result;
 }
 
