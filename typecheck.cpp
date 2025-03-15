@@ -690,45 +690,32 @@ bool typecheck(Node *node)
             return true;
         }
 
-        case NodeKind::program:
-        {
-            // TODO
-            UNREACHED;
-        }
-
         case NodeKind::return_statement:
         {
-            // TODO
-            UNREACHED;
+            auto retyrn = static_cast<ReturnNode *>(node);
+
+            if (typecheck(retyrn->expression) == false)
+            {
+                return false;
+            }
+
+            return true;
         }
 
         case NodeKind::simple_type:
-        {
-            // TODO
-            UNREACHED;
-        }
-
         case NodeKind::pointer_type:
-        {
-            // TODO
-            UNREACHED;
-        }
-
         case NodeKind::array_type:
-        {
-            // TODO
-            UNREACHED;
-        }
-
         case NodeKind::struct_type:
         {
-            // TODO
-            UNREACHED;
+            node->type = &BuiltinTypes::type;
+
+            return true;
         }
 
         case NodeKind::nop:
         {
-            node->type = node;
+            node->type = node;  // TODO: Smelly
+
             return true;
         }
     }

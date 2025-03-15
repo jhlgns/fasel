@@ -4,7 +4,6 @@
 #include "lex.h"
 #include <cstddef>
 #include <cstdint>
-#include <span>
 #include <vector>
 
 struct AstNode;
@@ -21,7 +20,6 @@ enum class NodeKind
     procedure,
     procedure_call,
     procedure_signature,
-    program,
     return_statement,
     simple_type,
     pointer_type,
