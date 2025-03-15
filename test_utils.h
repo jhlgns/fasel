@@ -57,6 +57,20 @@ inline AstLiteral *make_int_literal(uint64_t value, char suffix = '\0')
     return result;
 }
 
+inline AstLiteral *make_float_literal(float value)
+{
+    auto result = new AstLiteral{};
+    result->value.emplace<float>(value);
+    return result;
+}
+
+inline AstLiteral *make_double_literal(double value)
+{
+    auto result = new AstLiteral{};
+    result->value.emplace<double>(value);
+    return result;
+}
+
 inline AstLiteral *make_bool_literal(bool value)
 {
     auto result = new AstLiteral{};

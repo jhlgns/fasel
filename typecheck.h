@@ -238,6 +238,8 @@ struct BuiltinTypes
     static const SimpleTypeNode u32;
     static const SimpleTypeNode u16;
     static const SimpleTypeNode u8;
+    static const SimpleTypeNode f32;
+    static const SimpleTypeNode f64;
     static const SimpleTypeNode boolean;
     static const SimpleTypeNode type;
 };

@@ -138,12 +138,17 @@ namespace assertions
     struct Literal
     {
         std::optional<Token> token;
-        // std::optional<LiteralType> type;
         std::optional<int64_t> int_value;
+        std::optional<float> float_value;
+        std::optional<double> double_value;
         std::optional<bool> bool_value;
 
         void operator()(AstNode *node)
         {
+            auto n = this->int_value.has_value() + this->float_value.has_value() + this->double_value.has_value() +
+                     this->bool_value.has_value();
+            REQUIRE(n == 1);
+
             auto literal = ast_cast<AstLiteral>(node);
             REQUIRE(literal != nullptr);
 
@@ -152,16 +157,25 @@ namespace assertions
                 this->token.value()(literal->token);
             }
 
-            // if (this->type.has_value())
-            // {
-            //     REQUIRE(this->type.value() == literal->type);
-            // }
-
             if (this->int_value.has_value())
             {
                 REQUIRE(std::holds_alternative<uint64_t>(literal->value));
                 auto literal_int_value = std::get<uint64_t>(literal->value);
                 REQUIRE(this->int_value.value() == literal_int_value);
+            }
+
+            if (this->float_value.has_value())
+            {
+                REQUIRE(std::holds_alternative<float>(literal->value));
+                auto literal_float_value = std::get<float>(literal->value);
+                REQUIRE(this->float_value.value() == literal_float_value);
+            }
+
+            if (this->double_value.has_value())
+            {
+                REQUIRE(std::holds_alternative<double>(literal->value));
+                auto literal_double_value = std::get<double>(literal->value);
+                REQUIRE(this->double_value.value() == literal_double_value);
             }
 
             if (this->bool_value.has_value())
@@ -315,61 +329,104 @@ AstProcedure *parse_program_and_get_main(std::string_view source)
     return main;
 }
 
-enum class LiteralKind
+template<typename T>
+void test_literal(std::string_view literal_text, T value)
 {
-    integer,
-    boolean,
-};
+    auto source = std::format("main := proc() void {{ a := {} }}", literal_text);
+
+    auto literal = as::Literal{};
+    if constexpr (std::is_same_v<T, uint64_t>)
+    {
+        literal.int_value = value;
+    }
+    else if constexpr (std::is_same_v<T, float>)
+    {
+        literal.float_value = value;
+    }
+    else if constexpr (std::is_same_v<T, double>)
+    {
+        literal.double_value = value;
+    }
+    else if constexpr (std::is_same_v<T, bool>)
+    {
+        literal.bool_value = value;
+    }
+    else
+    {
+        static_assert(false, "Invalid type");
+    }
+
+    as::Procedure{
+        .signature = as::Nop{},
+
+        .body = as::Block{
+            .statements = {
+                as::Declaration{
+                    .identifier      = "a",
+                    .type            = as::IsNull{},
+                    .init_expression = literal,
+                },
+            }}}(parse_program_and_get_main(source));
+}
+
 TEST_CASE("Literals", "[parse]")
 {
-    auto test_literal = [](std::string_view literal_text, LiteralKind kind, int64_t expected_int, bool expected_bool)
-    {
-        auto source = std::format("main := proc() void {{ a := {} }}", literal_text);
+    test_literal<bool>("true", true);
+    test_literal<bool>("false", false);
 
-        auto literal = as::Literal{};
-        if (kind == LiteralKind::integer)
-        {
-            literal.int_value = expected_int;
-        }
-        else
-        {
-            literal.bool_value = expected_bool;
-        }
+#define INTEGER_CASE(literal) test_literal<uint64_t>(#literal, literal);
+    INTEGER_CASE(0);
+    INTEGER_CASE(1);
+    INTEGER_CASE(7);
+    INTEGER_CASE(788);
+    INTEGER_CASE(789237489234);
+    INTEGER_CASE(9223372036854775807);  // int64_t max value
 
-        as::Procedure{
-            .signature = as::Nop{},
+    INTEGER_CASE(0x0);
+    INTEGER_CASE(0x00003);
+    INTEGER_CASE(0xaaaaaaaaaa9900);
+    INTEGER_CASE(0x0000000000000000);
+    INTEGER_CASE(0x0000000000000001);
+    INTEGER_CASE(0x7fffffffffffffff);
+    INTEGER_CASE(0x78910fabc78eed81);
+    INTEGER_CASE(0xAFFED00F);
+    INTEGER_CASE(0xDec0dedFece5);
+#undef INTEGER_CASE
 
-            .body = as::Block{
-                .statements = {
-                    as::Declaration{
-                        .identifier      = "a",
-                        .type            = as::IsNull{},
-                        .init_expression = literal,
-                    },
-                }}}(parse_program_and_get_main(source));
-    };
+#define FLOAT_CASE(literal) test_literal<float>(#literal, static_cast<float>(literal));
+#define FLOAT_CASE_F(literal) test_literal<float>(#literal "f", static_cast<float>(literal));
+    FLOAT_CASE(0.0f);
+    FLOAT_CASE(0.f);
+    FLOAT_CASE_F(0);
+    FLOAT_CASE(1.2378492342738907891023475666147584f);
+    FLOAT_CASE(2378492342738907891023475666147584.1f);
+    FLOAT_CASE_F(2378492342738907891);
+    FLOAT_CASE(0.f);
+    FLOAT_CASE_F(0);
+    FLOAT_CASE(127.0f);
+    FLOAT_CASE_F(127);
+    FLOAT_CASE(
+        0.000000000000000000000000000000000000011754943508222875079687365372222456778186655567720875215087517062784172594547271728515625f);  // float min value
+    FLOAT_CASE(340282346638528859811704183484516925440.0000f);  // float max value
+    // TODO: Scientific float notation is not implemented yet
+    // FLOAT_CASE(1.17549435E-38f);  // float min value
+    // FLOAT_CASE(3.40282347E+38f);  // float max value
+#undef FLOAT_CASE
+#undef FLOAT_CASE_F
 
-    test_literal("true", LiteralKind::boolean, 0, true);
-    test_literal("false", LiteralKind::boolean, 0, false);
-
-#define CASE(literal) test_literal(#literal, LiteralKind::integer, literal, false);
-    CASE(0);
-    CASE(1);
-    CASE(7);
-    CASE(788);
-    CASE(789237489234);
-    CASE(9223372036854775807);  // int64_t max value
-
-    CASE(0x0);
-    CASE(0x00003);
-    CASE(0xaaaaaaaaaa9900);
-    CASE(0x0000000000000000);
-    CASE(0x0000000000000001);
-    CASE(0x7fffffffffffffff);
-    CASE(0x78910fabc78eed81);
-    CASE(0xAFFED00F);
-    CASE(0xDec0dedFece5);
-#undef CASE
+#define DOUBLE_CASE(literal) test_literal<double>(#literal, literal);
+    DOUBLE_CASE(.0);
+    DOUBLE_CASE(0.0);
+    DOUBLE_CASE(.782937401900959);
+    DOUBLE_CASE(123412784957798235.78293740190095923489);
+    DOUBLE_CASE(
+        0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000222507385850720138309023271733240406421921598046233183055332741688720443481391819585428315901251102056406733973103581100515243416155346010885601238537771882113077799353200233047961014744258363607192156504694250373420837525080665061665815894872049117996859163964850063590877011830487479978088775374994945158045160505091539985658247081864511353793580499211598108576605199243335211435239014879569960959128889160299264151106346631339366347758651302937176204732563178148566435087212282863764204484681140761391147706280168985324411002416144742161856716615054015428508471675290190316132277889672970737312333408698898317506783884692609277397797285865965494109136909540613646756870239867831529068098462);  // double min value (not really, I think it goes on)
+    DOUBLE_CASE(
+        179769313486231570814527423731704356798070567525844996598917476803157260780028538760589558632766878171540458953514382464234321326889464182768467546703537516986049910576551282076245490090389328944075868508455133942304583236903222948165808559332123348274797826204144723168738177180919299881250404026184124858368.0000);  // double max value
+    // TODO: Scientific float notation is not implemented yet
+    // DOUBLE_CASE(2.2250738585072014E-308);  // double min value
+    // DOUBLE_CASE(1.7976931348623157E+308);  // double max value
+#undef DOUBLE_CASE
 }
 
 TEST_CASE("Basic binary operators", "[parse]")

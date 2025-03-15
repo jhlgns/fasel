@@ -368,8 +368,11 @@ bool typecheck(Node *node)
                         return false;
                     }
 
-                    if ((lhs_simple->type_kind == SimpleTypeNode::Kind::signed_integer) !=
-                        (rhs_simple->type_kind == SimpleTypeNode::Kind::signed_integer))
+                    auto invalid_integer_types = lhs_simple->type_kind == SimpleTypeNode::Kind::signed_integer &&
+                                                     rhs_simple->type_kind == SimpleTypeNode::Kind::unsigned_integer ||
+                                                 lhs_simple->type_kind == SimpleTypeNode::Kind::unsigned_integer &&
+                                                     rhs_simple->type_kind == SimpleTypeNode::Kind::signed_integer;
+                    if (invalid_integer_types)
                     {
                         type_error(
                             bin_op,
@@ -407,11 +410,9 @@ bool typecheck(Node *node)
                     }
 
                     if (lhs_simple->type_kind != SimpleTypeNode::Kind::unsigned_integer ||
-                        lhs_simple->type_kind != SimpleTypeNode::Kind::unsigned_integer)
+                        rhs_simple->type_kind != SimpleTypeNode::Kind::unsigned_integer)
                     {
-                        type_error(
-                            bin_op,
-                            "Bitwise binary operators require unsigned integer expressions on both sides");
+                        type_error(bin_op, "Bitwise binary operators require unsigned integer operands on both sides");
                         return false;
                     }
 
@@ -569,12 +570,6 @@ bool typecheck(Node *node)
         {
             auto literal = static_cast<LiteralNode *>(node);
 
-            if (std::holds_alternative<bool>(literal->value))
-            {
-                literal->type = &BuiltinTypes::boolean;
-                return true;
-            }
-
             if (std::holds_alternative<uint64_t>(literal->value))
             {
                 if (literal->suffix == 'u')
@@ -586,6 +581,24 @@ bool typecheck(Node *node)
                     literal->type = &BuiltinTypes::i64;
                 }
 
+                return true;
+            }
+
+            if (std::holds_alternative<float>(literal->value))
+            {
+                literal->type = &BuiltinTypes::f32;
+                return true;
+            }
+
+            if (std::holds_alternative<double>(literal->value))
+            {
+                literal->type = &BuiltinTypes::f64;
+                return true;
+            }
+
+            if (std::holds_alternative<bool>(literal->value))
+            {
+                literal->type = &BuiltinTypes::boolean;
                 return true;
             }
 
@@ -1039,6 +1052,8 @@ const SimpleTypeNode BuiltinTypes::u64 = SimpleTypeNode{SimpleTypeNode::Kind::un
 const SimpleTypeNode BuiltinTypes::u32 = SimpleTypeNode{SimpleTypeNode::Kind::unsigned_integer, 4};
 const SimpleTypeNode BuiltinTypes::u16 = SimpleTypeNode{SimpleTypeNode::Kind::unsigned_integer, 2};
 const SimpleTypeNode BuiltinTypes::u8  = SimpleTypeNode{SimpleTypeNode::Kind::unsigned_integer, 1};
+const SimpleTypeNode BuiltinTypes::f32 = SimpleTypeNode{SimpleTypeNode::Kind::floatingpoint, 4};
+const SimpleTypeNode BuiltinTypes::f64 = SimpleTypeNode{SimpleTypeNode::Kind::floatingpoint, 8};
 
 const SimpleTypeNode BuiltinTypes::boolean = SimpleTypeNode{SimpleTypeNode::Kind::boolean, 1};
 const SimpleTypeNode BuiltinTypes::type    = SimpleTypeNode{SimpleTypeNode::Kind::type, -1};

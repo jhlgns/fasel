@@ -130,6 +130,39 @@ Token Lexer::next_token()
         return emit(*this, start, Tt::multi_line_comment);
     }
 
+    // NOTE: We must look for numerical literals before the simple tokens because otherwise we'd interpret 1.23 as '1', '.', '23'
+    auto has_point = *this->cursor.at == '.';
+    if (is_digit(*this->cursor.at) || has_point)
+    {
+        next(this->cursor);
+        if (*this->cursor.at == 'x')
+        {
+            next(this->cursor);
+        }
+
+        for (; is_hex_digit(*this->cursor.at) || *this->cursor.at == '.'; next(this->cursor))
+        {
+            if (*this->cursor.at == '.')
+            {
+                if (has_point)
+                {
+                    break;
+                }
+
+                has_point = true;
+            }
+        }
+    }
+    if (this->cursor.at > start.at)
+    {
+        if (*this->cursor.at == 'u' || *this->cursor.at == 'f')
+        {
+            next(this->cursor);
+        }
+
+        return emit(*this, start, Tt::numerical_literal);
+    }
+
     // clang-format off
     auto simple_tokens = {
         // std::make_tuple(":=", Tt::declaration_assignment),
@@ -186,28 +219,6 @@ Token Lexer::next_token()
         }
 
         return emit(*this, start, Tt::identifier);
-    }
-
-    if (is_digit(*this->cursor.at))
-    {
-        next(this->cursor);
-        if (*this->cursor.at == 'x')
-        {
-            next(this->cursor);
-        }
-
-        for (; is_hex_digit(*this->cursor.at); next(this->cursor))
-        {
-        }
-    }
-    if (this->cursor.at > start.at)
-    {
-        if (*this->cursor.at == 'u')
-        {
-            next(this->cursor);
-        }
-
-        return emit(*this, start, Tt::numerical_literal);
     }
 
     if (*this->cursor.at == '\0')

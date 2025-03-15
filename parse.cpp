@@ -3,6 +3,7 @@
 #include <charconv>
 #include <format>
 #include <iostream>
+#include <string>
 
 // TODO: The parsing functions should return an invalid parser on critical errors so that all parsing is cancelled
 
@@ -325,6 +326,8 @@ Parser parse_primary_expr(Parser p, AstNode *&out_primary_expr)
     Token token{};
     if (p >>= p.quiet().parse_token(Tt::numerical_literal, &token))
     {
+        assert(token.len > 0);
+
         p.arm("parsing number literal");
 
         AstLiteral literal{};
@@ -343,28 +346,77 @@ Parser parse_primary_expr(Parser p, AstNode *&out_primary_expr)
             base = 16;
         }
 
-        if (*end == 'u' || *end == 'f')
+        if (end[-1] == 'u' || (is_hex == false && end[-1] == 'f'))
         {
-            suffix = *end;
+            suffix = end[-1];
             --end;
         }
 
-        uint64_t value;
-        result = std::from_chars(begin, end, value, base);
-
-        if (result.ec != std::errc{})
+        auto has_point = token.text().find('.') != std::string_view::npos;
+        if (suffix == 'f')
         {
-            p.error(start, "Failed to parse integer literal");
-            return start;
+            // TODO: This does not support scientific float notation.
+            // std::from_chars for floating point numbers is not implemented
+            // in the current version of clang++ that is installable on Debian.
+            char *parse_end;
+            auto value = strtof(token.pos.at, &parse_end);
+
+            if (std::isnan(value))
+            {
+                p.error(start, "Failed to parse float literal");
+                return start;
+            }
+
+            if (parse_end != end)
+            {
+                p.error(start, "Failed to parse float literal");
+                return start;
+            }
+
+            literal.value.emplace<float>(value);
+        }
+        else if (has_point)
+        {
+            // TODO: This does not support scientific float notation.
+            // std::from_chars for floating point numbers is not implemented
+            // in the current version of clang++ that is installable on Debian.
+            char *parse_end;
+            auto value = strtod(token.pos.at, &parse_end);
+
+            if (std::isnan(value))
+            {
+                p.error(start, "Failed to parse double literal");
+                return start;
+            }
+
+            if (parse_end != end)
+            {
+                p.error(start, "Failed to parse double literal");
+                return start;
+            }
+
+            literal.value.emplace<double>(value);
+        }
+        else
+        {
+            uint64_t value;
+            result = std::from_chars(begin, end, value, base);
+
+            if (result.ec != std::errc{})
+            {
+                p.error(start, "Failed to parse integer literal");
+                return start;
+            }
+
+            if (result.ptr != end)
+            {
+                p.error(start, "Failed to parse integer literal");
+                return start;
+            }
+
+            literal.value.emplace<uint64_t>(value);
         }
 
-        if (result.ptr != end)
-        {
-            p.error(start, "Failed to parse integer literal");
-            return start;
-        }
-
-        literal.value.emplace<uint64_t>(value);
         literal.suffix = suffix;
 
         out_primary_expr = new AstLiteral{std::move(literal)};
