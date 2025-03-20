@@ -489,13 +489,15 @@ bool TypeChecker::typecheck(Node *node)
 
         case NodeKind::block:
         {
-            assert(this->current_procedure_body != nullptr);
-
             auto block = static_cast<BlockNode *>(node);
 
             for (auto statement : block->statements)
             {
-                statement->time = ++this->current_procedure_body->current_time;
+                if (this->current_procedure_body != nullptr)
+                {
+                    // NOTE: While typechecking the program root block, current_procedure_body is nullptr
+                    statement->time = ++this->current_procedure_body->current_time;
+                }
 
                 if (typecheck(statement) == false)
                 {
@@ -549,13 +551,15 @@ bool TypeChecker::typecheck(Node *node)
                 return false;
             }
 
-            assert(ident->time >= 0 && decl->time >= 0);
-
-            if (ident->time < decl->time)
-            {
-                this->error(ident, std::format("Identifier '{}' referenced before its declaration", ident->identifier));
-                return false;
-            }
+            // TODO: The time checking does not work yet, because the time is not assigned
+            // recursively in expressions - only the top level block statements get a time
+            // assert(ident->time >= 0 && decl->time >= 0);
+            //
+            // if (ident->time < decl->time)
+            // {
+            //     this->error(ident, std::format("Identifier '{}' referenced before its declaration", ident->identifier));
+            //     return false;
+            // }
 
             assert(decl->init_expression->type != nullptr);
 

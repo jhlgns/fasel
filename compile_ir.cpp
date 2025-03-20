@@ -15,7 +15,7 @@ LLVMContext llvm_context;
 IRBuilder ir_builder{llvm_context};
 Module the_module{"janguage test module", llvm_context};
 
-Type *make_type(Node *node)
+Type *make_type(const Node *node)
 {
     assert(node != nullptr);
 
@@ -23,7 +23,7 @@ Type *make_type(Node *node)
     {
         case NodeKind::simple_type:
         {
-            auto simple = static_cast<SimpleTypeNode *>(node);
+            auto simple = static_cast<const SimpleTypeNode *>(node);
 
             switch (simple->type_kind)
             {
@@ -48,13 +48,13 @@ Type *make_type(Node *node)
 
         case NodeKind::pointer_type:
         {
-            auto pointer = static_cast<PointerTypeNode *>(node);
+            auto pointer = static_cast<const PointerTypeNode *>(node);
             return ir_builder.getPtrTy();
         }
 
         case NodeKind::array_type:
         {
-            auto array = static_cast<ArrayTypeNode *>(node);
+            auto array = static_cast<const ArrayTypeNode *>(node);
 
             auto element_type = make_type(array->element_type);
 
@@ -76,18 +76,27 @@ Type *make_type(Node *node)
 
         case NodeKind::struct_type:
         {
-            auto strukt = static_cast<StructTypeNode *>(node);
+            auto strukt = static_cast<const StructTypeNode *>(node);
 
             UNREACHED;
         }
 
         case NodeKind::procedure_signature:
         {
-            auto signature = static_cast<ProcedureSignatureNode *>(node);
+            auto signature = static_cast<const ProcedureSignatureNode *>(node);
 
             auto return_type = make_type(signature->return_type);
+            std::vector<Type *> argument_types;
 
-            return FunctionType::get(return_type, false);
+            for (auto argument : signature->arguments)
+            {
+                auto argument_type = make_type(argument->init_expression->type);
+                argument_types.push_back(argument_type);
+            }
+
+            auto function_type = FunctionType::get(return_type, argument_types, false);
+
+            return function_type;
         }
 
         default: UNREACHED;
@@ -144,8 +153,6 @@ Value *generate_binary_operator_code(BinaryOperatorNode *bin_op)
                 case Tt::logical_or:            UNREACHED;  // TODO
                 default:                        UNREACHED;
             }
-
-            result = ir_builder.CreateAdd(lhs, rhs);
         }
 
         case SimpleTypeNode::Kind::unsigned_integer:
@@ -157,6 +164,8 @@ Value *generate_binary_operator_code(BinaryOperatorNode *bin_op)
 
     return result;
 }
+
+Function *function{};  // TODO
 
 Value *generate_code(Node *node)
 {
@@ -170,8 +179,17 @@ Value *generate_code(Node *node)
 
         case NodeKind::block:
         {
-            //auto block = ir_builder.CreateFCmpULT
-            UNREACHED;
+            auto block = static_cast<BlockNode *>(node);
+
+            auto result_block = BasicBlock::Create(llvm_context, "block", function);
+            ir_builder.SetInsertPoint(result_block);
+
+            for (auto statement : block->statements)
+            {
+                generate_code(statement);
+            }
+
+            return result_block;
         }
 
         case NodeKind::declaration:
@@ -187,34 +205,118 @@ Value *generate_code(Node *node)
             {
                 case NodeKind::procedure:
                 {
-                    auto type          = make_type(decl);
-                    auto function_type = cast<FunctionType>(make_type(decl));
-                    auto result =
-                        Function::Create(function_type, GlobalValue::LinkageTypes::InternalLinkage, decl->identifier);
-                    auto block = BasicBlock::Create(llvm_context, "entry");
+                    auto procedure = node_cast<ProcedureNode, true>(decl->init_expression);
 
-                    ir_builder.SetInsertPoint(block);
-                
-                    // TODO
+                    auto type          = make_type(decl->init_expression->type);
+                    auto function_type = cast<FunctionType>(type);
+                    auto function =
+                        Function::Create(function_type, GlobalValue::LinkageTypes::InternalLinkage, decl->identifier);
+
+                    auto i = 0;
+                    for (auto &arg : function->args())
+                    {
+                        arg.setName(procedure->signature->arguments[i]->identifier);
+                        ++i;
+                    }
+
+                    // TODO: Do we need to do anything with the function?
+
+                    ::function = function;  // TODO!!!!
+
+                    generate_code(decl->init_expression);
+
+                    function->print(outs());
+
+                    break;
                 }
 
-                default: UNREACHED;
+                default:
+                {
+                    // TODO
+                    break;
+                }
             }
+
+            return nullptr;
         }
 
         case NodeKind::identifier:
-        case NodeKind::if_statement:
+        {
+            // TODO!
+            return ConstantInt::get(IntegerType::get(llvm_context, 32), 1234);
+        }
+
+        case NodeKind::if_statement: UNREACHED;
         case NodeKind::literal:
+        {
+            auto literal = static_cast<LiteralNode *>(node);
+
+            auto simple_type = node_cast<SimpleTypeNode, true>(literal->type);
+            assert(simple_type != nullptr);
+
+            switch (simple_type->type_kind)
+            {
+                case SimpleTypeNode::Kind::invalid: UNREACHED;
+                case SimpleTypeNode::Kind::voyd:    UNREACHED;
+                case SimpleTypeNode::Kind::boolean: UNREACHED;
+
+                case SimpleTypeNode::Kind::signed_integer:
+                case SimpleTypeNode::Kind::unsigned_integer:
+                {
+                    auto value = std::get<uint64_t>(literal->value);
+                    return ConstantInt::get(IntegerType::get(llvm_context, simple_type->size * 8), value);
+                }
+
+                case SimpleTypeNode::Kind::floatingpoint: UNREACHED;
+                case SimpleTypeNode::Kind::type:          UNREACHED;
+            }
+        }
+
         case NodeKind::procedure:
-        case NodeKind::procedure_call:
-        case NodeKind::procedure_signature:
+        {
+            auto procedure = static_cast<ProcedureNode *>(node);
+
+            generate_code(procedure->body);
+
+            return nullptr;
+        }
+
+        case NodeKind::procedure_call: UNREACHED;
+
+        case NodeKind::procedure_signature: UNREACHED;
+
         case NodeKind::return_statement:
+        {
+            auto retyrn = static_cast<ReturnNode *>(node);
+
+            if (retyrn->expression->kind == NodeKind::nop)
+            {
+                return ir_builder.CreateRet(nullptr);
+            }
+
+            auto value = generate_code(retyrn->expression);
+            return ir_builder.CreateRet(value);
+        }
+
         case NodeKind::program:
+        {
+            auto program = static_cast<ProgramNode *>(node);
+            // generate_code(program->block);
+
+            for (auto declaration : program->block->statements)
+            {
+                assert(declaration->kind == NodeKind::declaration);
+                generate_code(declaration);
+            }
+
+            return nullptr;
+        }
+
         case NodeKind::simple_type:
         case NodeKind::pointer_type:
         case NodeKind::array_type:
         case NodeKind::struct_type:
-        case NodeKind::nop:                 break;
+        case NodeKind::nop:          break;
     }
 
     UNREACHED;
@@ -223,7 +325,7 @@ Value *generate_code(Node *node)
 std::string compile_to_ir(struct Node *node)
 {
     auto value = generate_code(node);
-    value->print(outs());
+    // value->print(outs());
 
     return "TODO";
 }

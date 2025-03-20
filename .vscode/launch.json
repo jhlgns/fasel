@@ -19,9 +19,16 @@
             "preLaunchTask": "build-debug",
             "name": "Debug tests",
             "program": "${workspaceFolder}/build-debug/tests",
-            // "args": ["Procedure calling with arguments"],
-            // "args": ["[string_util]"],
             "args": ["[parse],[typecheck]"],
+            "cwd": "${workspaceFolder}/build-debug"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "preLaunchTask": "build-debug",
+            "name": "Debug playground",
+            "program": "${workspaceFolder}/build-debug/playground",
+            "args": [],
             "cwd": "${workspaceFolder}/build-debug"
         }
     ]
