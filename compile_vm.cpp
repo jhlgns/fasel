@@ -1,14 +1,6 @@
+#if 0
 #include "compile.h"
-#include "basics.h"
-#include "disasm.h"
 #include "parse.h"
-#include <format>
-#include <span>
-
-std::string BytecodeWriter::disassemble()
-{
-    return ::disassemble(std::span{this->bytecode.begin(), this->bytecode.end()});
-}
 
 std::vector<AstBlock *> get_statement_child_blocks(AstNode *node)
 {
@@ -29,49 +21,6 @@ std::vector<AstBlock *> get_statement_child_blocks(AstNode *node)
 
     // TODO: Handle AstIf, AstWhile etc. once they are implemented
     return {};
-}
-
-void fix_block_hierarchy(AstBlock *root_block)
-{
-    // // TODO: We need a way to break out of the recursion
-    // visit(
-    //     root_block,
-    //     [root_block](AstNode *node)
-    //     {
-    //         if (auto block = ast_cast<AstBlock>(node))
-    //         {
-    //             if (block != root_block)
-    //             {
-    //                 block->parent_block = root_block;
-    //                 fix_block_hierarchy(block);
-    //             }
-    //         }
-    //     });
-    // /*
-
-    // program.block {
-    //     decl.init {
-    //         proc.body {
-    //            if.then_block {
-    //            }
-    //         }
-    //     }
-    // }
-
-    // */
-
-    // // TODO
-
-    // for (auto statement : root_block->statements)
-    // {
-    //     auto child_blocks = get_statement_child_blocks(statement);
-    //     for (auto child_block : child_blocks)
-    //     {
-    //         child_block->parent_block = root_block;
-
-    //         fix_block_hierarchy(child_block);
-    //     }
-    // }
 }
 
 void allocate_locals(AstBlock *block)
@@ -118,50 +67,40 @@ void allocate_locals(AstBlock *block)
     // block->size += max_child_block_size;
 }
 
-void write(uint8_t *data, size_t len, BytecodeWriter *w)
+void BytecodeWriter::write_data(const void *data, size_t length)
 {
-    if (w->pos + len > w->bytecode.size())
+    if (this->pos + length > this->bytecode.size())
     {
-        w->bytecode.resize(w->pos + len);
+        this->bytecode.resize(this->pos + length);
     }
 
-    memcpy(&w->bytecode[w->pos], data, len);
-    w->pos += len;
+    memcpy(&this->bytecode[this->pos], data, length);
+    this->pos += length;
 }
 
-void _write8(uint8_t value, BytecodeWriter *w)
+int64_t BytecodeWriter::write_op(OpCode op)
 {
-    write(&value, sizeof(value), w);
-}
-
-void _write64(int64_t value, BytecodeWriter *w)
-{
-    write((uint8_t *)&value, sizeof(value), w);
-}
-
-int64_t write_op(OpCode op, BytecodeWriter *w)
-{
-    auto addr = w->pos;
-    _write8(op, w);
+    auto addr = this->pos;
+    this->write_data(&op, sizeof(op));
 
     return addr;
 }
 
-int64_t write_op_8(OpCode op, uint8_t value, BytecodeWriter *w)
+int64_t BytecodeWriter::write_op_8(OpCode op, uint8_t value)
 {
-    auto addr = w->pos;
-    _write8(op, w);
-    _write8(value, w);
+    auto addr = this->pos;
+    this->write_data(&op, sizeof(op));
+    this->write_data(&value, sizeof(value));
 
     return addr;
 }
 
 // TODO: Use varint encoding
-int64_t write_op_64(OpCode op, int64_t value, BytecodeWriter *w)
+int64_t BytecodeWriter::write_op_64(OpCode op, int64_t value)
 {
-    auto addr = w->pos;
-    _write8(op, w);
-    _write64(value, w);
+    auto addr = this->pos;
+    this->write_data(&op, sizeof(op));
+    this->write_data(&value, sizeof(value));
 
     return addr;
 }
@@ -191,115 +130,115 @@ bool is_expression(AstKind kind)
 
 [[nodiscard]] bool generate_code(AstNode *node, BytecodeWriter *w)
 {
-    // if (auto bin_op = ast_cast<AstBinaryOperator>(node))
-    // {
-    //     if (bin_op->type == Tt::logical_and)
-    //     {
-    //         if (generate_expr(bin_op->lhs, w) == false)
-    //         {
-    //             return false;
-    //         }
+    if (auto bin_op = ast_cast<AstBinaryOperator>(node))
+    {
+        if (bin_op->type == Tt::logical_and)
+        {
+            if (generate_expr(bin_op->lhs, w) == false)
+            {
+                return false;
+            }
 
-    //         auto jmp0_false_pos_1 = w->pos;
-    //         write_op_64(JMP0, 333, w);
+            auto jmp0_false_pos_1 = w->pos;
+            w->write_op_64(JMP0, 333);
 
-    //         if (generate_expr(bin_op->rhs, w) == false)
-    //         {
-    //             return false;
-    //         }
+            if (generate_expr(bin_op->rhs, w) == false)
+            {
+                return false;
+            }
 
-    //         auto jmp0_false_pos_2 = w->pos;
-    //         write_op_64(JMP0, 333, w);
+            auto jmp0_false_pos_2 = w->pos;
+            w->write_op_64(JMP0, 333);
 
-    //         write_op_64(PUSHC, 1, w);
-    //         auto jmp_done_pos = w->pos;
-    //         write_op_64(JMP, 333, w);
+            w->write_op_64(PUSHC, 1);
+            auto jmp_done_pos = w->pos;
+            w->write_op_64(JMP, 333);
 
-    //         auto false_label = w->pos;
-    //         write_op_64(PUSHC, 0, w);
-    //         auto done_label = w->pos;
+            auto false_label = w->pos;
+            w->write_op_64(PUSHC, 0);
+            auto done_label = w->pos;
 
-    //         w->pos = jmp0_false_pos_1;
-    //         write_op_64(JMP0, false_label, w);
-    //         w->pos = jmp0_false_pos_2;
-    //         write_op_64(JMP0, false_label, w);
-    //         w->pos = jmp_done_pos;
-    //         write_op_64(JMP, done_label, w);
+            w->pos = jmp0_false_pos_1;
+            w->write_op_64(JMP0, false_label);
+            w->pos = jmp0_false_pos_2;
+            w->write_op_64(JMP0, false_label);
+            w->pos = jmp_done_pos;
+            w->write_op_64(JMP, done_label);
 
-    //         w->pos = done_label;
+            w->pos = done_label;
 
-    //         return true;
-    //     }
+            return true;
+        }
 
-    //     if (bin_op->type == Tt::logical_or)
-    //     {
-    //         if (generate_expr(bin_op->lhs, w) == false)
-    //         {
-    //             return false;
-    //         }
+        if (bin_op->type == Tt::logical_or)
+        {
+            if (generate_expr(bin_op->lhs, w) == false)
+            {
+                return false;
+            }
 
-    //         auto jmp1_true_pos_1 = w->pos;
-    //         write_op_64(JMP1, 333, w);
+            auto jmp1_true_pos_1 = w->pos;
+            w->write_op_64(JMP1, 333);
 
-    //         if (generate_expr(bin_op->rhs, w) == false)
-    //         {
-    //             return false;
-    //         }
+            if (generate_expr(bin_op->rhs, w) == false)
+            {
+                return false;
+            }
 
-    //         auto jmp1_true_pos_2 = w->pos;
-    //         write_op_64(JMP1, 333, w);
+            auto jmp1_true_pos_2 = w->pos;
+            w->write_op_64(JMP1, 333);
 
-    //         write_op_64(PUSHC, 0, w);
-    //         auto jmp_done_pos = w->pos;
-    //         write_op_64(JMP, 333, w);
+            w->write_op_64(PUSHC, 0);
+            auto jmp_done_pos = w->pos;
+            w->write_op_64(JMP, 333);
 
-    //         auto true_label = w->pos;
-    //         write_op_64(PUSHC, 1, w);
-    //         auto done_label = w->pos;
+            auto true_label = w->pos;
+            w->write_op_64(PUSHC, 1);
+            auto done_label = w->pos;
 
-    //         w->pos = jmp1_true_pos_1;
-    //         write_op_64(JMP1, true_label, w);
-    //         w->pos = jmp1_true_pos_2;
-    //         write_op_64(JMP1, true_label, w);
-    //         w->pos = jmp_done_pos;
-    //         write_op_64(JMP, done_label, w);
+            w->pos = jmp1_true_pos_1;
+            w->write_op_64(JMP1, true_label);
+            w->pos = jmp1_true_pos_2;
+            w->write_op_64(JMP1, true_label);
+            w->pos = jmp_done_pos;
+            w->write_op_64(JMP, done_label);
 
-    //         w->pos = done_label;
+            w->pos = done_label;
 
-    //         return true;
-    //     }
+            return true;
+        }
 
-    //     if (generate_expr(bin_op->lhs, w) == false || generate_expr(bin_op->rhs, w) == false)
-    //     {
-    //         return false;
-    //     }
+        if (generate_expr(bin_op->lhs, w) == false || generate_expr(bin_op->rhs, w) == false)
+        {
+            return false;
+        }
 
-    //     switch (bin_op->type)
-    //     {
-    //         case Tt::asterisk: write_op(MUL, w); break;
-    //         case Tt::slash:    write_op(DIV, w); break;
-    //         case Tt::mod:      write_op(MOD, w); break;
-    //         case Tt::plus:     write_op(ADD, w); break;
-    //         case Tt::minus:    write_op(SUB, w); break;
+        switch (bin_op->type)
+        {
+            case Tt::asterisk: write_op(MUL, w); break;
+            case Tt::slash:    write_op(DIV, w); break;
+            case Tt::mod:      write_op(MOD, w); break;
+            case Tt::plus:     write_op(ADD, w); break;
+            case Tt::minus:    write_op(SUB, w); break;
 
-    //         case Tt::bit_and: write_op(BITAND, w); break;
-    //         case Tt::bit_or:  write_op(BITOR, w); break;
-    //         case Tt::bit_xor: write_op(BITXOR, w); break;
+            case Tt::bit_and: write_op(BITAND, w); break;
+            case Tt::bit_or:  write_op(BITOR, w); break;
+            case Tt::bit_xor: write_op(BITXOR, w); break;
 
-    //         case Tt::left_shift:            write_op(LSH, w); break;
-    //         case Tt::right_shift:           write_op(RSH, w); break;
-    //         case Tt::equal:                 write_op(CMPEQ, w); break;
-    //         case Tt::inequal:               write_op(CMPNE, w); break;
-    //         case Tt::greater_than_or_equal: write_op(CMPGE, w); break;
-    //         case Tt::greater_than:          write_op(CMPGT, w); break;
-    //         case Tt::less_than_or_equal:    write_op(CMPLE, w); break;
-    //         case Tt::less_than:             write_op(CMPLT, w); break;
+            case Tt::left_shift:            write_op(LSH, w); break;
+            case Tt::right_shift:           write_op(RSH, w); break;
+            case Tt::equal:                 write_op(CMPEQ, w); break;
+            case Tt::inequal:               write_op(CMPNE, w); break;
+            case Tt::greater_than_or_equal: write_op(CMPGE, w); break;
+            case Tt::greater_than:          write_op(CMPGT, w); break;
+            case Tt::less_than_or_equal:    write_op(CMPLE, w); break;
+            case Tt::less_than:             write_op(CMPLT, w); break;
 
-    //         default: assert(false); break;
-    //     }
+            default: assert(false); break;
+        }
 
-    //     return true;
-    // }
+        return true;
+    }
 
     // if (auto ident = ast_cast<AstIdentifier>(node))
     // {
@@ -312,12 +251,12 @@ bool is_expression(AstKind kind)
 
     //     if (decl->enclosing_proc == nullptr)
     //     {
-    //         write_op_64(PUSHC, decl->address, w);
+    //         w->write_op_64(PUSHC, decl->address);
     //     }
     //     else
     //     {
     //         auto relative_address = decl->address - decl->enclosing_proc->body.size;
-    //         write_op_64(LOADR, relative_address, w);
+    //         w->write_op_64(LOADR, relative_address);
     //     }
 
     //     return true;
@@ -378,7 +317,7 @@ bool is_expression(AstKind kind)
     //         }
 
     //         auto relative_address = decl->address - decl->enclosing_proc->body.size;
-    //         write_op_64(STORER, relative_address, w);
+    //         w->write_op_64(STORER, relative_address);
     //     }
 
     //     return true;
@@ -518,3 +457,4 @@ bool is_expression(AstKind kind)
 
     return false;
 }
+#endif

@@ -21,6 +21,7 @@ enum class NodeKind
     procedure_call,
     procedure_signature,
     return_statement,
+    program,
     simple_type,
     pointer_type,
     array_type,
@@ -33,6 +34,8 @@ struct Node
     NodeKind kind{};
     const Node *type{};  // (type != nullptr) == (node is an expression)
     const BlockNode *containing_block{};
+    int64_t time =
+        -1;  // The index of this statement within its containing block + 1 (if this node is not a statement, this stays -1)
 
     explicit Node(NodeKind kind)
         : kind{kind}
@@ -127,33 +130,33 @@ struct BlockNode : NodeOfKind<NodeKind::block>
 
 struct DeclarationNode : NodeOfKind<NodeKind::declaration>
 {
-    std::string_view identifier;
-    Node *specified_type;
-    Node *init_expression;
+    std::string_view identifier{};
+    Node *specified_type{};
+    Node *init_expression{};
 };
 
 struct IdentifierNode : NodeOfKind<NodeKind::identifier>
 {
-    std::string_view identifier;
+    std::string_view identifier{};
 };
 
 struct IfNode : NodeOfKind<NodeKind::identifier>
 {
-    Node *condition;
-    BlockNode *then_block;
-    BlockNode *else_block;
+    Node *condition{};
+    BlockNode *then_block{};
+    BlockNode *else_block{};
 };
 
 struct LiteralNode : NodeOfKind<NodeKind::literal>
 {
-    std::variant<uint64_t, float, double, bool> value;
+    std::variant<uint64_t, float, double, bool> value{};
     char suffix{};
 };
 
 struct ProcedureSignatureNode : NodeOfKind<NodeKind::procedure_signature>
 {
     std::vector<DeclarationNode *> arguments{};
-    Node *return_type;
+    Node *return_type{};
 };
 
 struct ProcedureNode : NodeOfKind<NodeKind::procedure>
@@ -170,7 +173,12 @@ struct ProcedureCallNode : NodeOfKind<NodeKind::procedure_call>
 
 struct ReturnNode : NodeOfKind<NodeKind::return_statement>
 {
-    Node *expression;
+    Node *expression{};
+};
+
+struct ProgramNode : NodeOfKind<NodeKind::program>
+{
+    BlockNode *block{};
 };
 
 struct SimpleTypeNode : NodeOfKind<NodeKind::simple_type>
@@ -204,13 +212,13 @@ struct SimpleTypeNode : NodeOfKind<NodeKind::simple_type>
 
 struct PointerTypeNode : NodeOfKind<NodeKind::pointer_type>
 {
-    Node *target_type;
+    Node *target_type{};
 };
 
 struct ArrayTypeNode : NodeOfKind<NodeKind::array_type>
 {
-    Node *length_expression;
-    Node *element_type;
+    Node *length_expression{};
+    Node *element_type{};
 };
 
 struct StructTypeNode : NodeOfKind<NodeKind::struct_type>
@@ -247,4 +255,12 @@ struct BuiltinTypes
 };
 
 Node *make_node(BlockNode *containing_block, AstNode *ast);
-[[nodiscard]] bool typecheck(Node *node);
+
+struct TypeChecker
+{
+    bool print_errors = false;
+
+    [[nodiscard]] bool typecheck(Node *node);
+
+    void error(const Node *node, std::string_view message);
+};

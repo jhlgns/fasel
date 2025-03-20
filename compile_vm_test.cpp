@@ -1,7 +1,8 @@
-#include "catch2/catch_test_macros.hpp"
-#include "compile.h"
-#include "parse.h"
-#include <string_view>
+#if 0
+#    include "catch2/catch_test_macros.hpp"
+#    include "compile.h"
+#    include "parse.h"
+#    include <string_view>
 
 AstSimpleType *make_simple_type(std::string_view identifier)
 {
@@ -409,3 +410,4 @@ main := proc() {
 
     test_codegen(source, &mock);
 }
+#endif

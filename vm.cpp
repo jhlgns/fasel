@@ -1,6 +1,5 @@
 #include "vm.h"
-#include "compile.h"
-#include "disasm.h"
+#include "compile_vm.h"
 #include "op_code.h"
 #include "parse.h"
 #include <format>
@@ -147,9 +146,10 @@ void run_program(Vm *vm)
 
             std::cout << "Program:" << std::endl;
 
-            auto disasm =
-                disassemble(std::span{&vm->memory[Vm::program_start], vm->program_length}, vm->rip - Vm::program_start);
-            std::cout << disasm << std::endl;
+            UNREACHED;
+            // auto disasm =
+                // disassemble(std::span{&vm->memory[Vm::program_start], vm->program_length}, vm->rip - Vm::program_start);
+            // std::cout << disasm << std::endl;
 
             std::string command;
             std::getline(std::cin, command);
@@ -166,24 +166,36 @@ void run_program(Vm *vm)
                 break;
             }
 
-            case LOADR:
-            {
-                auto offset = read_arg_64(vm);
-                int64_t value;
-                read_memory(vm, vm->rsp + offset, &value, sizeof(value));
-                push_64(vm, value);
+#define LOADR_CASE(bytes, cpp_type)                               \
+    case LOADR##bytes:                                            \
+    {                                                             \
+        auto offset = read_arg_64(vm);                            \
+        cpp_type value;                                           \
+        read_memory(vm, vm->rsp + offset, &value, sizeof(value)); \
+        push_64(vm, value);                                       \
+                                                                  \
+        break;                                                    \
+    }
+                LOADR_CASE(1, uint8_t)
+                LOADR_CASE(2, uint16_t)
+                LOADR_CASE(4, uint32_t)
+                LOADR_CASE(8, uint64_t)
+#undef LOADR_CASE
 
-                break;
-            }
-
-            case STORER:
-            {
-                auto offset = read_arg_64(vm);
-                auto value  = pop_64(vm);
-                write_memory(vm, vm->rsp + offset, &value, sizeof(value));
-
-                break;
-            }
+#define STORER_CASE(bytes)                                 \
+    case STORER##bytes:                                    \
+    {                                                      \
+        auto offset = read_arg_64(vm);                     \
+        auto value  = pop_64(vm);                          \
+        write_memory(vm, vm->rsp + offset, &value, bytes); \
+                                                           \
+        break;                                             \
+    }
+                STORER_CASE(1)
+                STORER_CASE(2)
+                STORER_CASE(4)
+                STORER_CASE(8)
+#undef STORER_CASE
 
             case ADDRSP:
             {

@@ -10,8 +10,8 @@ comment
 
 
 fib := proc(n i64) i64 {
-    if n == 0 { return 0 }
-    if n == 1 { return 1 }
+    if n == 0 return 0
+    if n == 1 return 1
 
     return fib(n - 1) + fib(n - 2)
 }
@@ -26,9 +26,8 @@ main := proc() void {
     // With explicit type and without init expression
     c: i32
 
-     // Type notation similar to Golang
-     // Unary operators are trailing
-    d: *i32 = c&
+     // Type notation similar to Golang/C
+    d: *i32 = &c
 
     // Type casting
     casted := 12.34 to i64
@@ -37,10 +36,10 @@ main := proc() void {
     // (Imagine doing this in C!)
     array: []*[2]proc(a: i64, f: f32)
 
-    while done! {
+    while !done {
         a <<= 1
 
-        if a > 128  break
+        if a > 128 break
     }
 }
 

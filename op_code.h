@@ -1,5 +1,6 @@
 #pragma once
 
+#include "basics.h"
 #include <cassert>
 #include <cstdint>
 
@@ -67,9 +68,26 @@ enum OpCode : uint8_t
 {
     // Memory operations
     PUSHC,    // value = read i64; push i64 value;
-    LOADR,    // offs = read i64; push i64 *(RSP + offs);
-    LOAD,     // addr = read i64; push i64 *addr;
-    STORER,   // offs = read i64; value = pop i64; *(RSP + offs) = value;
+
+    // Load relative from RSP (for stack local addressing without base pointer)
+    LOADR1,    // offs = read i64; push i64 *(i8 *)(RSP + offs);
+    LOADR2,    // offs = read i64; push i64 *(i16 *)(RSP + offs);
+    LOADR4,    // offs = read i64; push i64 *(i32 *)(RSP + offs);
+    LOADR8,    // offs = read i64; push i64 *(i64 *)(RSP + offs);
+
+    // Load from hardcoded address
+    LOAD1,    // addr = read i64; push i64 *(i8 *)addr;
+    LOAD2,    // addr = read i64; push i64 *(i16 *)addr;
+    LOAD4,    // addr = read i64; push i64 *(i32 *)addr;
+    LOAD8,    // addr = read i64; push i64 *(i64 *)addr;
+
+    // Store relative to RSP (for stack local addressing without base pointer)
+    STORER1,   // offs = read i64; value = pop i64; *(i8 *)(RSP + offs) = value;
+    STORER2,   // offs = read i64; value = pop i64; *(i16 *)(RSP + offs) = value;
+    STORER4,   // offs = read i64; value = pop i64; *(i32 *)(RSP + offs) = value;
+    STORER8,   // offs = read i64; value = pop i64; *(i64 *)(RSP + offs) = value;
+
+    // Allocate stack space
     ADDRSP,   // offs = read i64; RSP += offs
 
     // Integer arithmetic operations
@@ -104,33 +122,42 @@ inline const char *to_string(OpCode op)
 {
     switch (op)
     {
-        case PUSHC:  return "PUSHC";
-        case LOADR:  return "LOADR";
-        case LOAD:   return "LOAD";
-        case STORER: return "STORER";
-        case ADDRSP: return "ADDRSP";
-        case ADD:    return "ADD";
-        case SUB:    return "SUB";
-        case MUL:    return "MUL";
-        case DIV:    return "DIV";
-        case MOD:    return "MOD";
-        case BITAND: return "BITAND";
-        case BITOR:  return "BITOR";
-        case BITXOR: return "BITXOR";
-        case LSH:    return "LSH";
-        case RSH:    return "RSH";
-        case CMPEQ:  return "CMPEQ";
-        case CMPNE:  return "CMPNE";
-        case CMPLT:  return "CMPLT";
-        case CMPLE:  return "CMPLE";
-        case CMPGT:  return "CMPGT";
-        case CMPGE:  return "CMPGE";
-        case JMP0:   return "JMP0";
-        case JMP1:   return "JMP1";
-        case JMP:    return "JMP";
-        case CALL:   return "CALL";
-        case RET:    return "RET";
+        case OpCode::PUSHC:   return "PUSHC";
+        case OpCode::LOADR1:  return "LOADR1";
+        case OpCode::LOADR2:  return "LOADR2";
+        case OpCode::LOADR4:  return "LOADR4";
+        case OpCode::LOADR8:  return "LOADR8";
+        case OpCode::LOAD1:   return "LOAD1";
+        case OpCode::LOAD2:   return "LOAD2";
+        case OpCode::LOAD4:   return "LOAD4";
+        case OpCode::LOAD8:   return "LOAD8";
+        case OpCode::STORER1: return "STORER1";
+        case OpCode::STORER2: return "STORER2";
+        case OpCode::STORER4: return "STORER4";
+        case OpCode::STORER8: return "STORER8";
+        case OpCode::ADDRSP:  return "ADDRSP";
+        case OpCode::ADD:     return "ADD";
+        case OpCode::SUB:     return "SUB";
+        case OpCode::MUL:     return "MUL";
+        case OpCode::DIV:     return "DIV";
+        case OpCode::MOD:     return "MOD";
+        case OpCode::BITAND:  return "BITAND";
+        case OpCode::BITOR:   return "BITOR";
+        case OpCode::BITXOR:  return "BITXOR";
+        case OpCode::LSH:     return "LSH";
+        case OpCode::RSH:     return "RSH";
+        case OpCode::CMPEQ:   return "CMPEQ";
+        case OpCode::CMPNE:   return "CMPNE";
+        case OpCode::CMPLT:   return "CMPLT";
+        case OpCode::CMPLE:   return "CMPLE";
+        case OpCode::CMPGT:   return "CMPGT";
+        case OpCode::CMPGE:   return "CMPGE";
+        case OpCode::JMP0:    return "JMP0";
+        case OpCode::JMP1:    return "JMP1";
+        case OpCode::JMP:     return "JMP";
+        case OpCode::CALL:    return "CALL";
+        case OpCode::RET:     return "RET";
     }
 
-    assert(false);
+    UNREACHED;
 };

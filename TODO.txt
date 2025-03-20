@@ -1,5 +1,13 @@
 # TODO
 
+Today:
+[ ] Decide on a backend to implement first
+    [ ] C code generation
+    [ ] LLVM IR stuff
+        [ ] How to emit properly?
+            * https://llvm.org/docs/tutorial/MyFirstLanguageFrontend/LangImpl03.html
+    [ ] Custom virtual machine (stack machine)
+
 ## General
 
 [ ] Fix the block hierarchy before compiling

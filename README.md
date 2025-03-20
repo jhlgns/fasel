@@ -28,9 +28,10 @@ Some notes:
     * Loops are reduced to `if`'s with `goto`'s
     * `defer` statements are inserted before return statements
 * **Typecheck**: AST -> program nodes
-* **Allocate**: program nodes -> program nodes with addresses set
+    * The sizes of all variables are now known
 * (Potentially: **Optimize**: program nodes -> optimized program nodes)
-* **Codegeneration**: program nodes -> VM instructions
+* **...Codegeneration (VM)**: program nodes -> VM instructions
+* **...Codegeneration (IR)**: program nodes -> LLVM IR code
 
 NOTE: Maybe it is worth to convert the program nodes to [single static assignment form](https://en.wikipedia.org/wiki/Static_single-assignment_form) before code generation.
 

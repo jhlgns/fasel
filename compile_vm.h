@@ -12,13 +12,13 @@ struct BytecodeWriter
     struct AstBlock *current_block{};
     struct AstProcedure *current_proc{};
 
-    std::string disassemble();
+    void write_data(const void *data, size_t length);
+    int64_t write_op(OpCode op);
+    int64_t write_op_8(OpCode op, uint8_t value);
+    int64_t write_op_64(OpCode op, int64_t value);
 };
 
 std::vector<AstBlock *> get_statement_child_blocks(class AstNode *node);
 
-int64_t write_op(OpCode op, BytecodeWriter *w);
-int64_t write_op_8(OpCode op, uint8_t value, BytecodeWriter *w);
-int64_t write_op_64(OpCode op, int64_t value, BytecodeWriter *w);
-
 [[nodiscard]] bool generate_code(struct AstNode *node, BytecodeWriter *w);
+

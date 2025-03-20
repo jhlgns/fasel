@@ -4,6 +4,8 @@
 
 using Types = BuiltinTypes;
 
+static TypeChecker type_checker;
+
 void test_type(AstNode *ast, const Node *expected_type)
 {
     BlockNode block;
@@ -13,11 +15,11 @@ void test_type(AstNode *ast, const Node *expected_type)
 
     if (expected_type == nullptr)
     {
-        REQUIRE(typecheck(node) == false);
+        REQUIRE(type_checker.typecheck(node) == false);
     }
     else
     {
-        REQUIRE(typecheck(node));
+        REQUIRE(type_checker.typecheck(node));
         REQUIRE(types_equal(node->type, expected_type));
     }
 }
@@ -153,7 +155,7 @@ TEST_CASE("Identifiers - declared in parent block", "[typecheck]")
     decl->init_expression  = new NopNode{};
     parent_block.statements.push_back(decl);
 
-    REQUIRE(typecheck(decl));
+    REQUIRE(type_checker.typecheck(decl));
 
     BlockNode child_block{};
     child_block.containing_block = &parent_block;
@@ -163,7 +165,7 @@ TEST_CASE("Identifiers - declared in parent block", "[typecheck]")
         identifier.containing_block = &child_block;
         identifier.identifier       = "x";
 
-        REQUIRE(typecheck(&identifier));
+        REQUIRE(type_checker.typecheck(&identifier));
         REQUIRE(types_equal(identifier.type, &Types::u8));
     }
 
@@ -172,7 +174,7 @@ TEST_CASE("Identifiers - declared in parent block", "[typecheck]")
         identifier.containing_block = &child_block;
         identifier.identifier       = "y";
 
-        REQUIRE(typecheck(&identifier) == false);
+        REQUIRE(type_checker.typecheck(&identifier) == false);
     }
 }
 
@@ -187,14 +189,14 @@ TEST_CASE("Identifiers - uninitialized, with explicit type", "[typecheck]")
     decl->init_expression  = new NopNode{};
     block.statements.push_back(decl);
 
-    REQUIRE(typecheck(decl));
+    REQUIRE(type_checker.typecheck(decl));
 
     {
         IdentifierNode identifier{};
         identifier.containing_block = &block;
         identifier.identifier       = "x";
 
-        REQUIRE(typecheck(&identifier));
+        REQUIRE(type_checker.typecheck(&identifier));
         REQUIRE(types_equal(identifier.type, &Types::u8));
     }
 
@@ -203,7 +205,7 @@ TEST_CASE("Identifiers - uninitialized, with explicit type", "[typecheck]")
         identifier.containing_block = &block;
         identifier.identifier       = "y";
 
-        REQUIRE(typecheck(&identifier) == false);
+        REQUIRE(type_checker.typecheck(&identifier) == false);
     }
 }
 
@@ -221,14 +223,14 @@ TEST_CASE("Identifiers - initialized, without explicit type", "[typecheck]")
     decl->init_expression  = &init_expression;
     block.statements.push_back(decl);
 
-    REQUIRE(typecheck(decl));
+    REQUIRE(type_checker.typecheck(decl));
 
     {
         IdentifierNode identifier{};
         identifier.containing_block = &block;
         identifier.identifier       = "x";
 
-        REQUIRE(typecheck(&identifier));
+        REQUIRE(type_checker.typecheck(&identifier));
         REQUIRE(types_equal(identifier.type, &Types::boolean));
     }
 
@@ -237,7 +239,7 @@ TEST_CASE("Identifiers - initialized, without explicit type", "[typecheck]")
         identifier.containing_block = &block;
         identifier.identifier       = "y";
 
-        REQUIRE(typecheck(&identifier) == false);
+        REQUIRE(type_checker.typecheck(&identifier) == false);
     }
 }
 
@@ -255,7 +257,7 @@ TEST_CASE("Declarations - initialized, with different explicit type", "[typechec
     decl->init_expression  = &init_expression;
     block.statements.push_back(decl);
 
-    REQUIRE(typecheck(decl) == false);
+    REQUIRE(type_checker.typecheck(decl) == false);
 }
 
 TEST_CASE("Procedures", "[typecheck]")

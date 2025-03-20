@@ -25,8 +25,9 @@ std::string disassemble(std::span<uint8_t> program, int64_t mark_address)
         memcpy(&insn.op, &program[rip], sizeof(OpCode));
         rip += sizeof(OpCode);
 
-        insn.has_argument = insn.op == PUSHC || insn.op == LOADR || insn.op == STORER || insn.op == ADDRSP ||
-                            insn.op == JMP0 || insn.op == JMP1 || insn.op == JMP;
+        insn.has_argument = insn.op == PUSHC || (insn.op >= LOADR1 && insn.op <= LOADR8) ||
+                            (insn.op >= STORER1 && insn.op <= STORER8) || insn.op == ADDRSP || insn.op == JMP0 ||
+                            insn.op == JMP1 || insn.op == JMP;
         // auto is_jump = insn.op == JMP0 || insn.op == JMP1 || insn.op == JMP;
         // assert(is_jump == false || insn.has_argument);
 

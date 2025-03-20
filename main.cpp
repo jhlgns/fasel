@@ -5,8 +5,8 @@
 #include <string.h>
 
 #include "basics.h"
-#include "compile.h"
 #include "parse.h"
+#include "typecheck.h"
 
 int main(int argc, char **argv)
 {
@@ -50,37 +50,46 @@ int main(int argc, char **argv)
 
     Lexer lexer{source};
 
-#if 0
-    printf("Dumping tokens\n");
-    Token token;
-    while (true)
-    {
-        token = next_token(&l);
-        printf("Line %d char %d: %s ", (int)token.line, (int)token.line_offset, to_string(token.type));
-        if (token.len > 0)
-            fwrite(l.start, 1, l.at - l.start, stdout);
-        printf("\n");
-
-        if (token.type == Tt::EOF)
-        {
-            break;
-        }
-    }
-#else
-    AstProgram program{};
+    AstProgram program;
     if (parse_program(source, program) == false)
     {
+        std::cout << "Failed to parse program" << std::endl;
         return 1;
     }
 
-    /* printf("Program:\n%s\n", dump_node(0, &program).data()); */
+    auto node = make_node(nullptr, &program);
 
-    BytecodeWriter w{};
-    if (generate_code(&program.block, &w) == false)
-    {
-        return 1;
-    }
-#endif
+// #if 0
+//     printf("Dumping tokens\n");
+//     Token token;
+//     while (true)
+//     {
+//         token = next_token(&l);
+//         printf("Line %d char %d: %s ", (int)token.line, (int)token.line_offset, to_string(token.type));
+//         if (token.len > 0)
+//             fwrite(l.start, 1, l.at - l.start, stdout);
+//         printf("\n");
+
+//         if (token.type == Tt::EOF)
+//         {
+//             break;
+//         }
+//     }
+// #else
+//     AstProgram program{};
+//     if (parse_program(source, program) == false)
+//     {
+//         return 1;
+//     }
+
+//     /* printf("Program:\n%s\n", dump_node(0, &program).data()); */
+
+//     // BytecodeWriter w{};
+//     // if (generate_code(&program.block, &w) == false)
+//     // {
+//     //     return 1;
+//     // }
+// #endif
 
     return 0;
 }

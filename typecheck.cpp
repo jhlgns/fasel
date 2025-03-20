@@ -58,12 +58,6 @@ BinaryOperatorCategory bin_op_category(TokenType type)
     }
 }
 
-void type_error(Node *node, std::string_view message)
-{
-    // TODO
-    std::cout << "Typechecking error: " << message << std::endl;
-}
-
 DeclarationNode *BlockNode::find_declaration(std::string_view name) const
 {
     for (auto statement : this->statements)
@@ -123,6 +117,7 @@ Node *make_node_internal(BlockNode *containing_block, AstNode *ast)
             {
                 auto statement_node = make_node(result, statement);
                 result->statements.push_back(statement_node);
+                statement_node->time = block->statements.size();
             }
 
             return result;
@@ -239,17 +234,29 @@ Node *make_node_internal(BlockNode *containing_block, AstNode *ast)
             return result;
         }
 
-        case AstKind::program:
-        {
-            UNREACHED;
-        }
-
         case AstKind::return_statement:
         {
             auto retyrn = static_cast<AstReturn *>(ast);
 
-            auto result        = new ReturnNode{};
-            result->expression = make_node(containing_block, retyrn->expression);
+            auto result = new ReturnNode{};
+            if (retyrn->expression == nullptr)
+            {
+                result->expression = new NopNode{};
+            }
+            else
+            {
+                result->expression = make_node(containing_block, retyrn->expression);
+            }
+
+            return result;
+        }
+
+        case AstKind::program:
+        {
+            auto program = static_cast<AstProgram *>(ast);
+
+            auto result   = new ProgramNode{};
+            result->block = node_cast<BlockNode, true>(make_node(nullptr, &program->block));
 
             return result;
         }
@@ -309,7 +316,7 @@ Node *make_node(BlockNode *containing_block, AstNode *ast)
     return result;
 }
 
-bool typecheck(Node *node)
+bool TypeChecker::typecheck(Node *node)
 {
     // NOTE: Only set the type if the node is an expression, do not assign void to statements
 
@@ -342,19 +349,19 @@ bool typecheck(Node *node)
                 {
                     if (lhs_simple == nullptr)
                     {
-                        type_error(bin_op, "Invalid kind of type for left operand");
+                        this->error(bin_op, "Invalid kind of type for left operand");
                         return false;
                     }
 
                     if (rhs_simple == nullptr)
                     {
-                        type_error(bin_op, "Invalid kind of type for right operand");
+                        this->error(bin_op, "Invalid kind of type for right operand");
                         return false;
                     }
 
                     if (lhs_simple->is_numerical() == false || rhs_simple->is_numerical() == false)
                     {
-                        type_error(bin_op, "Arithmetic binary operators require numerical expressions on both sides");
+                        this->error(bin_op, "Arithmetic binary operators require numerical expressions on both sides");
                         return false;
                     }
 
@@ -364,7 +371,7 @@ bool typecheck(Node *node)
                                                      rhs_simple->type_kind == SimpleTypeNode::Kind::signed_integer;
                     if (invalid_integer_types)
                     {
-                        type_error(
+                        this->error(
                             bin_op,
                             "Arithmetic on different signedness is not supported. You must cast the operands to the same type.");
                         return false;
@@ -389,20 +396,20 @@ bool typecheck(Node *node)
                 {
                     if (lhs_simple == nullptr)
                     {
-                        type_error(bin_op, "Invalid kind of type for left operand");
+                        this->error(bin_op, "Invalid kind of type for left operand");
                         return false;
                     }
 
                     if (rhs_simple == nullptr)
                     {
-                        type_error(bin_op, "Invalid kind of type for right operand");
+                        this->error(bin_op, "Invalid kind of type for right operand");
                         return false;
                     }
 
                     if (lhs_simple->type_kind != SimpleTypeNode::Kind::unsigned_integer ||
                         rhs_simple->type_kind != SimpleTypeNode::Kind::unsigned_integer)
                     {
-                        type_error(bin_op, "Bitwise binary operators require unsigned integer operands on both sides");
+                        this->error(bin_op, "Bitwise binary operators require unsigned integer operands on both sides");
                         return false;
                     }
 
@@ -422,7 +429,7 @@ bool typecheck(Node *node)
 
                     if (types_equal(bin_op->lhs->type, bin_op->rhs->type) == false)
                     {
-                        type_error(bin_op, "Only expressions of the same time can be compared");
+                        this->error(bin_op, "Only expressions of the same time can be compared");
                         return false;
                     }
 
@@ -435,25 +442,25 @@ bool typecheck(Node *node)
                 {
                     if (lhs_simple == nullptr)
                     {
-                        type_error(bin_op, "Invalid type for left operand");
+                        this->error(bin_op, "Invalid type for left operand");
                         return false;
                     }
 
                     if (rhs_simple == nullptr)
                     {
-                        type_error(bin_op, "Invalid type for right operand");
+                        this->error(bin_op, "Invalid type for right operand");
                         return false;
                     }
 
                     if (lhs_simple->type_kind != SimpleTypeNode::Kind::boolean)
                     {
-                        type_error(bin_op, "Left side is not a boolean expression");
+                        this->error(bin_op, "Left side is not a boolean expression");
                         return false;
                     }
 
                     if (lhs_simple->type_kind != SimpleTypeNode::Kind::boolean)
                     {
-                        type_error(bin_op, "Right side is not a boolean expression");
+                        this->error(bin_op, "Right side is not a boolean expression");
                         return false;
                     }
 
@@ -466,7 +473,7 @@ bool typecheck(Node *node)
                 {
                     if (types_equal(bin_op->lhs->type, bin_op->rhs->type) == false)
                     {
-                        type_error(bin_op, "An assignment expression must have the same type as the variable");
+                        this->error(bin_op, "An assignment expression must have the same type as the variable");
                         return false;
                     }
 
@@ -515,7 +522,7 @@ bool typecheck(Node *node)
 
                 if (types_equal(decl->specified_type, decl->init_expression->type) == false)
                 {
-                    type_error(
+                    this->error(
                         decl,
                         std::format(
                             "The declaration init expression does not have the same inferred type as the specified type on the declaration (specified type: {}; inferred type: {})",
@@ -535,11 +542,18 @@ bool typecheck(Node *node)
 
             if (decl == nullptr)
             {
-                type_error(ident, std::format("Could not find the declaration of identifier '{}'", ident->identifier));
+                this->error(ident, std::format("Could not find the declaration of identifier '{}'", ident->identifier));
                 return false;
             }
 
-            // TODO: Use before declare should lead to this error, which should be caught
+            assert(ident->time >= 0 && decl->time >= 0);
+
+            if (ident->time < decl->time)
+            {
+                this->error(ident, std::format("Identifier '{}' referenced before its declaration", ident->identifier));
+                return false;
+            }
+
             assert(decl->init_expression->type != nullptr);
 
             ident->type = decl->init_expression->type;
@@ -634,7 +648,7 @@ bool typecheck(Node *node)
 
             if (call->procedure->type->kind != NodeKind::procedure_signature)
             {
-                type_error(node, "The procedure expression is not callable");
+                this->error(node, "The procedure expression is not callable");
                 return false;
             }
 
@@ -642,7 +656,7 @@ bool typecheck(Node *node)
 
             if (call->arguments.size() != signature->arguments.size())
             {
-                type_error(
+                this->error(
                     node,
                     "The procedure call does not have the same number of arguments as the procedure signature");
                 return false;
@@ -657,7 +671,7 @@ bool typecheck(Node *node)
 
                 if (types_equal(call->arguments[i]->type, signature->arguments[i]->init_expression->type) == false)
                 {
-                    type_error(
+                    this->error(
                         node,
                         std::format(
                             "Wrong type passed for argument '{}' (expected: {}, got: {})",
@@ -702,6 +716,18 @@ bool typecheck(Node *node)
             return true;
         }
 
+        case NodeKind::program:
+        {
+            auto program = static_cast<ProgramNode *>(node);
+
+            if (typecheck(program->block) == false)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
         case NodeKind::simple_type:
         case NodeKind::pointer_type:
         case NodeKind::array_type:
@@ -722,6 +748,17 @@ bool typecheck(Node *node)
 
     UNREACHED;
 }
+
+void TypeChecker::error(const Node *node, std::string_view message)
+{
+    if (this->print_errors == false)
+    {
+        return;
+    }
+
+    std::cout << "Type error: " << message << std::endl;
+}
+
 
 bool types_equal(const Node *lhs, const Node *rhs)
 {
