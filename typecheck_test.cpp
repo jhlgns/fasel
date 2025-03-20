@@ -4,10 +4,11 @@
 
 using Types = BuiltinTypes;
 
-static TypeChecker type_checker;
 
 void test_type(AstNode *ast, const Node *expected_type)
 {
+    TypeChecker type_checker;
+
     BlockNode block;
 
     auto node = make_node(&block, ast);
@@ -146,105 +147,172 @@ TEST_CASE("Binary operators", "[typecheck]")
 
 TEST_CASE("Identifiers - declared in parent block", "[typecheck]")
 {
-    BlockNode parent_block{};
-
-    auto decl              = new DeclarationNode{};
-    decl->containing_block = &parent_block;
-    decl->identifier       = "x";
-    decl->specified_type   = const_cast<SimpleTypeNode *>(&Types::u8);  // TODO
-    decl->init_expression  = new NopNode{};
-    parent_block.statements.push_back(decl);
-
-    REQUIRE(type_checker.typecheck(decl));
-
-    BlockNode child_block{};
-    child_block.containing_block = &parent_block;
-
+    SECTION("Found")
     {
+        TypeChecker type_checker;
+
+        BlockNode parent_block{};
+        // TODO: This is very janky
+        type_checker.current_procedure_body = &parent_block;
+
+        auto decl              = new DeclarationNode{};
+        decl->containing_block = &parent_block;
+        decl->identifier       = "x";
+        decl->specified_type   = const_cast<SimpleTypeNode *>(&Types::u8);  // TODO
+        decl->init_expression  = new NopNode{};
+        parent_block.statements.push_back(decl);
+
+        REQUIRE(type_checker.typecheck(&parent_block));
+
+        BlockNode child_block{};
+        child_block.containing_block = &parent_block;
+
         IdentifierNode identifier{};
         identifier.containing_block = &child_block;
         identifier.identifier       = "x";
+        child_block.statements.push_back(&identifier);
 
-        REQUIRE(type_checker.typecheck(&identifier));
+        REQUIRE(type_checker.typecheck(&child_block));
+        // REQUIRE(type_checker.typecheck(&identifier));
         REQUIRE(types_equal(identifier.type, &Types::u8));
     }
 
+    SECTION("Not found")
     {
+        TypeChecker type_checker;
+
+        BlockNode parent_block{};
+        // TODO: This is very janky
+        type_checker.current_procedure_body = &parent_block;
+
+        auto decl              = new DeclarationNode{};
+        decl->containing_block = &parent_block;
+        decl->identifier       = "x";
+        decl->specified_type   = const_cast<SimpleTypeNode *>(&Types::u8);  // TODO
+        decl->init_expression  = new NopNode{};
+        parent_block.statements.push_back(decl);
+
+        REQUIRE(type_checker.typecheck(&parent_block));
+
+        BlockNode child_block{};
+        child_block.containing_block = &parent_block;
+
         IdentifierNode identifier{};
         identifier.containing_block = &child_block;
         identifier.identifier       = "y";
+        child_block.statements.push_back(&identifier);
 
-        REQUIRE(type_checker.typecheck(&identifier) == false);
+        REQUIRE(type_checker.typecheck(&child_block) == false);
+        // REQUIRE(type_checker.typecheck(&identifier) == false);
     }
 }
 
 TEST_CASE("Identifiers - uninitialized, with explicit type", "[typecheck]")
 {
-    BlockNode block{};
-
-    auto decl              = new DeclarationNode{};
-    decl->containing_block = &block;
-    decl->identifier       = "x";
-    decl->specified_type   = const_cast<SimpleTypeNode *>(&Types::u8);  // TODO
-    decl->init_expression  = new NopNode{};
-    block.statements.push_back(decl);
-
-    REQUIRE(type_checker.typecheck(decl));
-
+    SECTION("Found")
     {
+        TypeChecker type_checker;
+
+        BlockNode block{};
+        type_checker.current_procedure_body = &block;
+
+        auto decl              = new DeclarationNode{};
+        decl->containing_block = &block;
+        decl->identifier       = "x";
+        decl->specified_type   = const_cast<SimpleTypeNode *>(&Types::u8);  // TODO
+        decl->init_expression  = new NopNode{};
+        block.statements.push_back(decl);
+
         IdentifierNode identifier{};
         identifier.containing_block = &block;
         identifier.identifier       = "x";
+        block.statements.push_back(&identifier);
 
-        REQUIRE(type_checker.typecheck(&identifier));
+        REQUIRE(type_checker.typecheck(&block));
         REQUIRE(types_equal(identifier.type, &Types::u8));
     }
 
+    SECTION("Not found")
     {
+        TypeChecker type_checker;
+
+        BlockNode block{};
+        type_checker.current_procedure_body = &block;
+
+        auto decl              = new DeclarationNode{};
+        decl->containing_block = &block;
+        decl->identifier       = "x";
+        decl->specified_type   = const_cast<SimpleTypeNode *>(&Types::u8);  // TODO
+        decl->init_expression  = new NopNode{};
+        block.statements.push_back(decl);
+
         IdentifierNode identifier{};
         identifier.containing_block = &block;
         identifier.identifier       = "y";
+        block.statements.push_back(&identifier);
 
-        REQUIRE(type_checker.typecheck(&identifier) == false);
+        REQUIRE(type_checker.typecheck(&block) == false);
     }
 }
 
 TEST_CASE("Identifiers - initialized, without explicit type", "[typecheck]")
 {
-    BlockNode block{};
-
-    LiteralNode init_expression{};
-    init_expression.value.emplace<bool>(true);
-
-    auto decl              = new DeclarationNode{};
-    decl->containing_block = &block;
-    decl->identifier       = "x";
-    decl->specified_type   = new NopNode{};
-    decl->init_expression  = &init_expression;
-    block.statements.push_back(decl);
-
-    REQUIRE(type_checker.typecheck(decl));
-
+    SECTION("Found")
     {
+        TypeChecker type_checker;
+
+        BlockNode block{};
+        type_checker.current_procedure_body = &block;
+
+        LiteralNode init_expression{};
+        init_expression.value.emplace<bool>(true);
+
+        auto decl              = new DeclarationNode{};
+        decl->containing_block = &block;
+        decl->identifier       = "x";
+        decl->specified_type   = new NopNode{};
+        decl->init_expression  = &init_expression;
+        block.statements.push_back(decl);
+
         IdentifierNode identifier{};
         identifier.containing_block = &block;
         identifier.identifier       = "x";
+        block.statements.push_back(&identifier);
 
-        REQUIRE(type_checker.typecheck(&identifier));
+        REQUIRE(type_checker.typecheck(&block));
         REQUIRE(types_equal(identifier.type, &Types::boolean));
     }
 
+    SECTION("Not found")
     {
+        TypeChecker type_checker;
+
+        BlockNode block{};
+        type_checker.current_procedure_body = &block;
+
+        LiteralNode init_expression{};
+        init_expression.value.emplace<bool>(true);
+
+        auto decl              = new DeclarationNode{};
+        decl->containing_block = &block;
+        decl->identifier       = "x";
+        decl->specified_type   = new NopNode{};
+        decl->init_expression  = &init_expression;
+        block.statements.push_back(decl);
+
         IdentifierNode identifier{};
         identifier.containing_block = &block;
         identifier.identifier       = "y";
+        block.statements.push_back(&identifier);
 
-        REQUIRE(type_checker.typecheck(&identifier) == false);
+        REQUIRE(type_checker.typecheck(&block) == false);
     }
 }
 
 TEST_CASE("Declarations - initialized, with different explicit type", "[typecheck]")
 {
+    TypeChecker type_checker;
+
     BlockNode block{};
 
     LiteralNode init_expression{};

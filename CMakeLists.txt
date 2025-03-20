@@ -3,8 +3,9 @@ project(janguage LANGUAGES CXX)
 
 set(CMAKE_C_COMPILER /usr/local/bin/clang CACHE FILEPATH "" FORCE)
 set(CMAKE_CXX_COMPILER /usr/local/bin/clang++ CACHE FILEPATH "" FORCE)
+set(CMAKE_LINKER_TYPE LLD CACHE STRING "" FORCE)
 add_compile_options(-std=c++20 -stdlib=libc++)
-add_link_options(-std=c++20 -stdlib=libc++)
+add_link_options(-std=c++20 -stdlib=libc++ -lc++abi)
 
 find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
@@ -39,7 +40,7 @@ target_include_directories(jang PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${LLVM_INCLUDE_DIRS})
 target_link_libraries(jang PUBLIC ${llvm_libs})
-target_compile_features(jang PUBLIC cxx_std_20)
+# target_compile_features(jang PUBLIC cxx_std_20)
 target_compile_options(jang PUBLIC -Werror=switch)
 # target_compile_options(jang PUBLIC -fsanitize=address)
 # target_link_options(jang PUBLIC -fsanitize=address)
@@ -52,9 +53,10 @@ add_executable(playground playground.cpp ${shared_source_files})
 target_compile_definitions(playground PUBLIC ${LLVM_DEFINITIONS_LIST})
 target_include_directories(playground PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${LLVM_INCLUDE_DIRS})
+    ${LLVM_INCLUDE_DIRS}
+    )
 target_link_libraries(playground PUBLIC ${llvm_libs})
-target_compile_features(playground PUBLIC cxx_std_20)
+# target_compile_features(playground PUBLIC cxx_std_20)
 target_compile_options(playground PUBLIC -Werror=switch)
 
 
@@ -63,7 +65,6 @@ target_compile_options(playground PUBLIC -Werror=switch)
 #
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/Catch2)
-# find_package(Catch2 3 REQUIRED)
 
 add_executable(
     tests
@@ -76,5 +77,12 @@ add_executable(
     vm_test.cpp
     ${shared_source_files}
     )
-target_include_directories(tests PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(tests PUBLIC Catch2::Catch2WithMain)
+target_compile_definitions(tests PUBLIC ${LLVM_DEFINITIONS_LIST})
+target_include_directories(tests PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${LLVM_INCLUDE_DIRS}
+    )
+target_link_libraries(tests PUBLIC
+    Catch2::Catch2WithMain
+    ${llvm_libs}
+    )

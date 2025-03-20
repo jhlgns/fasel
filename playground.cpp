@@ -8,11 +8,9 @@
 
 using namespace llvm;
 
-LLVMContext llvm_context;
-IRBuilder ir_builder{llvm_context};
-Module the_module{"janguage test module", llvm_context};
-
 int main(int argc, char **argv)
 {
+    LLVMContext llvm_context;
+    IRBuilder ir_builder{llvm_context};
+    Module the_module{"janguage test module", llvm_context};
 }
-

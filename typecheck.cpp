@@ -117,7 +117,6 @@ Node *make_node_internal(BlockNode *containing_block, AstNode *ast)
             {
                 auto statement_node = make_node(result, statement);
                 result->statements.push_back(statement_node);
-                statement_node->time = block->statements.size();
             }
 
             return result;
@@ -490,10 +489,14 @@ bool TypeChecker::typecheck(Node *node)
 
         case NodeKind::block:
         {
+            assert(this->current_procedure_body != nullptr);
+
             auto block = static_cast<BlockNode *>(node);
 
             for (auto statement : block->statements)
             {
+                statement->time = ++this->current_procedure_body->current_time;
+
                 if (typecheck(statement) == false)
                 {
                     return false;
@@ -628,6 +631,18 @@ bool TypeChecker::typecheck(Node *node)
             auto proc = static_cast<ProcedureNode *>(node);
 
             if (typecheck(proc->signature) == false)
+            {
+                return false;
+            }
+
+            auto old_body                = this->current_procedure_body;
+            this->current_procedure_body = proc->body;
+            defer
+            {
+                this->current_procedure_body = old_body;
+            };
+
+            if (typecheck(proc->body) == false)
             {
                 return false;
             }
@@ -918,20 +933,17 @@ std::string type_to_string(const Node *type)
     }
 }
 
-const SimpleTypeNode BuiltinTypes::voyd = SimpleTypeNode{SimpleTypeNode::Kind::voyd, -1};
-
-const SimpleTypeNode BuiltinTypes::i64 = SimpleTypeNode{SimpleTypeNode::Kind::signed_integer, 8};
-const SimpleTypeNode BuiltinTypes::i32 = SimpleTypeNode{SimpleTypeNode::Kind::signed_integer, 4};
-const SimpleTypeNode BuiltinTypes::i16 = SimpleTypeNode{SimpleTypeNode::Kind::signed_integer, 2};
-const SimpleTypeNode BuiltinTypes::i8  = SimpleTypeNode{SimpleTypeNode::Kind::signed_integer, 1};
-
-const SimpleTypeNode BuiltinTypes::u64 = SimpleTypeNode{SimpleTypeNode::Kind::unsigned_integer, 8};
-const SimpleTypeNode BuiltinTypes::u32 = SimpleTypeNode{SimpleTypeNode::Kind::unsigned_integer, 4};
-const SimpleTypeNode BuiltinTypes::u16 = SimpleTypeNode{SimpleTypeNode::Kind::unsigned_integer, 2};
-const SimpleTypeNode BuiltinTypes::u8  = SimpleTypeNode{SimpleTypeNode::Kind::unsigned_integer, 1};
-const SimpleTypeNode BuiltinTypes::f32 = SimpleTypeNode{SimpleTypeNode::Kind::floatingpoint, 4};
-const SimpleTypeNode BuiltinTypes::f64 = SimpleTypeNode{SimpleTypeNode::Kind::floatingpoint, 8};
-
+const SimpleTypeNode BuiltinTypes::voyd    = SimpleTypeNode{SimpleTypeNode::Kind::voyd, -1};
+const SimpleTypeNode BuiltinTypes::i64     = SimpleTypeNode{SimpleTypeNode::Kind::signed_integer, 8};
+const SimpleTypeNode BuiltinTypes::i32     = SimpleTypeNode{SimpleTypeNode::Kind::signed_integer, 4};
+const SimpleTypeNode BuiltinTypes::i16     = SimpleTypeNode{SimpleTypeNode::Kind::signed_integer, 2};
+const SimpleTypeNode BuiltinTypes::i8      = SimpleTypeNode{SimpleTypeNode::Kind::signed_integer, 1};
+const SimpleTypeNode BuiltinTypes::u64     = SimpleTypeNode{SimpleTypeNode::Kind::unsigned_integer, 8};
+const SimpleTypeNode BuiltinTypes::u32     = SimpleTypeNode{SimpleTypeNode::Kind::unsigned_integer, 4};
+const SimpleTypeNode BuiltinTypes::u16     = SimpleTypeNode{SimpleTypeNode::Kind::unsigned_integer, 2};
+const SimpleTypeNode BuiltinTypes::u8      = SimpleTypeNode{SimpleTypeNode::Kind::unsigned_integer, 1};
+const SimpleTypeNode BuiltinTypes::f32     = SimpleTypeNode{SimpleTypeNode::Kind::floatingpoint, 4};
+const SimpleTypeNode BuiltinTypes::f64     = SimpleTypeNode{SimpleTypeNode::Kind::floatingpoint, 8};
 const SimpleTypeNode BuiltinTypes::boolean = SimpleTypeNode{SimpleTypeNode::Kind::boolean, 1};
 const SimpleTypeNode BuiltinTypes::type    = SimpleTypeNode{SimpleTypeNode::Kind::type, -1};
 

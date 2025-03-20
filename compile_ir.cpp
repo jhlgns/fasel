@@ -216,6 +216,8 @@ Value *generate_code(Node *node)
         case NodeKind::struct_type:
         case NodeKind::nop:                 break;
     }
+
+    UNREACHED;
 }
 
 std::string compile_to_ir(struct Node *node)

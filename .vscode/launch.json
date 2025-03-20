@@ -7,22 +7,22 @@
         {
             "type": "lldb",
             "request": "launch",
-            "preLaunchTask": "build",
+            "preLaunchTask": "build-debug",
             "name": "Debug compiler",
-            "program": "${workspaceFolder}/build/jang",
+            "program": "${workspaceFolder}/build-debug/jang",
             "args": ["../example.jan"],
-            "cwd": "${workspaceFolder}/build"
+            "cwd": "${workspaceFolder}/build-debug"
         },
         {
             "type": "lldb",
             "request": "launch",
-            "preLaunchTask": "build",
+            "preLaunchTask": "build-debug",
             "name": "Debug tests",
-            "program": "${workspaceFolder}/build/tests",
+            "program": "${workspaceFolder}/build-debug/tests",
             // "args": ["Procedure calling with arguments"],
             // "args": ["[string_util]"],
             "args": ["[parse],[typecheck]"],
-            "cwd": "${workspaceFolder}/build"
+            "cwd": "${workspaceFolder}/build-debug"
         }
     ]
 }

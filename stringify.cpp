@@ -181,7 +181,7 @@ std::string dump_node(int indent_level, AstNode *node)
         case AstKind::binary_operator:     return to_string(indent_level, static_cast<AstBinaryOperator *>(node));
         case AstKind::block:               return to_string(indent_level, static_cast<AstBlock *>(node));
         case AstKind::declaration:         return to_string(indent_level, static_cast<AstDeclaration *>(node));
-        case AstKind::if_statement:           return to_string(indent_level, static_cast<AstIf *>(node));
+        case AstKind::if_statement:        return to_string(indent_level, static_cast<AstIf *>(node));
         case AstKind::identifier:          return to_string(indent_level, static_cast<AstIdentifier *>(node));
         case AstKind::literal:             return to_string(indent_level, static_cast<AstLiteral *>(node));
         case AstKind::procedure:           return to_string(indent_level, static_cast<AstProcedure *>(node));
@@ -192,4 +192,6 @@ std::string dump_node(int indent_level, AstNode *node)
         case AstKind::simple_type:         return to_string(indent_level, static_cast<AstSimpleType *>(node));
         default:                           assert(false);
     }
+
+    UNREACHED;
 }

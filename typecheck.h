@@ -122,6 +122,7 @@ struct BlockNode : NodeOfKind<NodeKind::block>
     int64_t offset_from_parent_block{};
     int64_t memory_size{};  // Size of all local variables
     // int64_t memory_size_of_args{};  // Size of all procedure arguments
+    int64_t current_time{};  // TODO: Document
 
     inline bool is_global() const { return this->containing_block == nullptr; }
 
@@ -259,6 +260,7 @@ Node *make_node(BlockNode *containing_block, AstNode *ast);
 struct TypeChecker
 {
     bool print_errors = false;
+    BlockNode *current_procedure_body{};
 
     [[nodiscard]] bool typecheck(Node *node);
 
