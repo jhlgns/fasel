@@ -9,11 +9,40 @@
 // https://llvm.org/docs/ProgrammersManual.html
 // https://github.com/mukul-rathi/bolt/blob/master/src/llvm-backend/deserialise_ir/expr_ir.cc
 
+/*
+
+main := proc()
+{
+    a := 1
+    b := 2
+
+    if a == 2
+    {
+        print("Hallo")
+    }
+
+    {
+        c := 3
+        b = 1
+
+        while b > 10
+        {
+            f := 10
+            print(b)
+        }
+    }
+}
+
+
+*/
+
 using namespace llvm;
 
 auto source = R"(
 main := proc() void {
-    a := 1
+    a := 123
+    a = a * 2
+    b := 456
     return 2 + a * 3
 }
 )"sv;

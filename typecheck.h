@@ -33,7 +33,7 @@ struct Node
 {
     NodeKind kind{};
     const Node *type{};  // (type != nullptr) == (node is an expression)
-    const BlockNode *containing_block{};
+    BlockNode *containing_block{};
     int64_t time =
         -1;  // The index of this statement within its containing block + 1 (if this node is not a statement, this stays -1)
 
@@ -116,6 +116,17 @@ struct BinaryOperatorNode : NodeOfKind<NodeKind::binary_operator>
     Node *rhs{};
 };
 
+namespace llvm
+{
+    class Value;
+}
+
+struct LocalVariable
+{
+    struct DeclarationNode *declaration{};
+    llvm::Value *location{};
+};
+
 struct BlockNode : NodeOfKind<NodeKind::block>
 {
     std::vector<Node *> statements{};
@@ -124,9 +135,11 @@ struct BlockNode : NodeOfKind<NodeKind::block>
     // int64_t memory_size_of_args{};  // Size of all procedure arguments
     int64_t current_time{};  // TODO: Document
 
+    std::unordered_map<std::string, LocalVariable> locals{};
+
     inline bool is_global() const { return this->containing_block == nullptr; }
 
-    struct DeclarationNode *find_declaration(std::string_view name) const;
+    std::optional<LocalVariable> find_local(std::string_view name) const;
 };
 
 struct DeclarationNode : NodeOfKind<NodeKind::declaration>
@@ -134,6 +147,8 @@ struct DeclarationNode : NodeOfKind<NodeKind::declaration>
     std::string_view identifier{};
     Node *specified_type{};
     Node *init_expression{};
+
+    bool is_global() const { return this->containing_block->containing_block == nullptr; }
 };
 
 struct IdentifierNode : NodeOfKind<NodeKind::identifier>

@@ -58,25 +58,20 @@ BinaryOperatorCategory bin_op_category(TokenType type)
     }
 }
 
-DeclarationNode *BlockNode::find_declaration(std::string_view name) const
+std::optional<LocalVariable> BlockNode::find_local(std::string_view name) const
 {
-    for (auto statement : this->statements)
+    auto it = this->locals.find(std::string{name});
+    if (it != this->locals.end())
     {
-        if (auto decl = node_cast<DeclarationNode>(statement))
-        {
-            if (decl->identifier == name)
-            {
-                return decl;
-            }
-        }
+        return it->second;
     }
 
     if (this->containing_block != nullptr)
     {
-        return this->containing_block->find_declaration(name);
+        return this->containing_block->find_local(name);
     }
 
-    return nullptr;
+    return std::nullopt;
 }
 
 Node *make_node_internal(BlockNode *containing_block, AstNode *ast)
@@ -512,6 +507,16 @@ bool TypeChecker::typecheck(Node *node)
         {
             auto decl = static_cast<DeclarationNode *>(node);
 
+            if (decl->containing_block->find_local(decl->identifier) != std::nullopt)
+            {
+                this->error(decl, std::format("Duplicate declaration identifier '{}'", decl->identifier));
+                return false;
+            }
+
+            auto [it, ok] = decl->containing_block->locals.insert(
+                std::make_pair(std::string{decl->identifier}, LocalVariable{.declaration = decl}));
+            assert(ok);
+
             if (typecheck(decl->init_expression) == false)
             {
                 return false;
@@ -543,9 +548,9 @@ bool TypeChecker::typecheck(Node *node)
         case NodeKind::identifier:
         {
             auto ident = static_cast<IdentifierNode *>(node);
-            auto decl  = ident->containing_block->find_declaration(ident->identifier);
+            auto local = ident->containing_block->find_local(ident->identifier);
 
-            if (decl == nullptr)
+            if (local == std::nullopt)
             {
                 this->error(ident, std::format("Could not find the declaration of identifier '{}'", ident->identifier));
                 return false;
@@ -561,9 +566,9 @@ bool TypeChecker::typecheck(Node *node)
             //     return false;
             // }
 
-            assert(decl->init_expression->type != nullptr);
+            assert(local->declaration->init_expression->type != nullptr);
 
-            ident->type = decl->init_expression->type;
+            ident->type = local->declaration->init_expression->type;
 
             return true;
         }
