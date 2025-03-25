@@ -35,4 +35,5 @@ build/
 build-*/
 .cache/
 
+compile_commands.json
 clang-tidy.log
