@@ -1,4 +1,5 @@
 #include "compile_ir.h"
+#include "jit.h"
 #include "parse.h"
 #include "typecheck.h"
 #include <llvm/IR/IRBuilder.h>
@@ -39,11 +40,18 @@ main := proc()
 using namespace llvm;
 
 auto source = R"(
-main := proc() void {
-    a := 123
-    a = a * 2
-    b := 456
-    return 2 + a * 3
+main := proc() i64 {
+    i64_var := 123
+    // TODO: Fix the store instruction emission (needs a pointer, gets something else currently)
+    //i64_var = i64_var * 2
+
+    float_var: f32 = 456f
+
+    // TODO: Create implicit conversion node
+    //coerced := i64_var * float_var
+
+    //return 2 + i64_var * 3
+    return 56473810
 }
 )"sv;
 
@@ -51,6 +59,7 @@ using namespace llvm;
 
 int main(int argc, char **argv)
 {
+    // 1. Parsing
     AstProgram program;
     if (parse_program(source, program) == false)
     {
@@ -58,23 +67,22 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    auto node = make_node(nullptr, &program);
+    // 2. Typechecking
+    auto program_node = make_node(nullptr, &program);
+
     TypeChecker type_checker{.print_errors = true};
-    if (type_checker.typecheck(node) == false)
+    if (type_checker.typecheck(program_node) == false)
     {
         std::cout << "Typechecking failed" << std::endl;
         return 1;
     }
 
-    auto ir = compile_to_ir(node);
+    // 3. Compile to IR
+    auto compilation_result = compile_to_ir(program_node);
+    compilation_result.module->print(outs(), nullptr);
+
+    // 4. Run JIT
+    run_main_jit(std::move(compilation_result.context), std::move(compilation_result.module));
 
     std::cout << "Done" << std::endl;
-
-
-    LLVMContext llvm_context;
-    IRBuilder ir_builder{llvm_context};
-    Module the_module{"janguage test module", llvm_context};
-
-    auto function_type = FunctionType::get(ir_builder.getVoidTy(), false);
-    auto function      = Function::Create(function_type, GlobalValue::LinkageTypes::InternalLinkage);
 }

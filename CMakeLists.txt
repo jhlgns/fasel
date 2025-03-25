@@ -8,9 +8,10 @@ add_compile_options(-std=c++20 -stdlib=libc++)
 add_link_options(-std=c++20 -stdlib=libc++ -lc++abi)
 
 find_package(LLVM REQUIRED CONFIG)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${LLVM_ROOT}/share/llvm/cmake")
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
-llvm_map_components_to_libnames(llvm_libs support core irreader irprinter bitstreamreader demangle)
+llvm_map_components_to_libnames(llvm_libs support core irreader irprinter bitstreamreader demangle orcjit X86)
 message(STATUS "llvm_libs: ${llvm_libs}")
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 
@@ -21,6 +22,7 @@ endif()
 set(shared_source_files
     compile_ir.cpp
     disasm.cpp
+    jit.cpp
     lex.cpp
     memory_pool.cpp
     parse.cpp

@@ -1,6 +1,15 @@
 #include "compile_ir.h"
 #include "typecheck.h"
 
+#include <llvm/ADT/StringRef.h>
+#include <llvm/ExecutionEngine/ExecutionEngine.h>
+#include <llvm/ExecutionEngine/Orc/CompileUtils.h>
+#include <llvm/ExecutionEngine/Orc/Core.h>
+#include <llvm/ExecutionEngine/Orc/ExecutionUtils.h>
+#include <llvm/ExecutionEngine/Orc/IRCompileLayer.h>
+#include <llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h>
+#include <llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h>
+#include <llvm/ExecutionEngine/SectionMemoryManager.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/NoFolder.h>
@@ -10,19 +19,21 @@
 // https://llvm.org/docs/ProgrammersManual.html
 // https://github.com/mukul-rathi/bolt/blob/master/src/llvm-backend/deserialise_ir/expr_ir.cc
 
-using namespace llvm;
+// TODO: For testing, use reverse compilation to C: https://github.com/lifting-bits/rellic
 
-static LLVMContext llvm_context;
+using namespace llvm;
 
 struct IrCompiler
 {
-    explicit IrCompiler()
-        : module{"JanguageTestModule", llvm_context}
+    explicit IrCompiler(LLVMContext &llvm_context)
+        : llvm_context{llvm_context}
+        , module{std::make_unique<Module>("JanguageTestModule", llvm_context)}
         , ir{llvm_context}
     {
     }
 
-    Module module;
+    LLVMContext &llvm_context;
+    std::unique_ptr<Module> module;
     Function *function{};
     IRBuilder<llvm::NoFolder> ir;
 
@@ -106,12 +117,12 @@ struct IrCompiler
                 auto length_literal = node_cast<LiteralNode>(array->length_expression);
                 if (length_literal == nullptr)
                 {
-                    UNREACHED;
+                    TODO;
                 }
 
                 if (std::holds_alternative<uint64_t>(length_literal->value) == false)
                 {
-                    UNREACHED;
+                    TODO;
                 }
 
                 auto length = std::get<uint64_t>(length_literal->value);
@@ -123,7 +134,7 @@ struct IrCompiler
             {
                 auto strukt = static_cast<const StructTypeNode *>(node);
 
-                UNREACHED;
+                TODO;
             }
 
             case NodeKind::procedure_signature:
@@ -153,21 +164,17 @@ struct IrCompiler
         auto lhs = this->generate_code(bin_op->lhs);
         if (lhs == nullptr)
         {
-            UNREACHED;  // TODO
-            return nullptr;
+            UNREACHED;
         }
 
         auto rhs = this->generate_code(bin_op->rhs);
         if (rhs == nullptr)
         {
-            UNREACHED;  // TODO
-            return nullptr;
+            UNREACHED;
         }
 
         assert(bin_op->type->kind == NodeKind::simple_type);
         auto type = node_cast<SimpleTypeNode, true>(bin_op->type);
-
-        Value *result{};
 
         switch (type->type_kind)
         {
@@ -175,39 +182,63 @@ struct IrCompiler
             {
                 switch (bin_op->operator_type)
                 {
-                    case Tt::asterisk: result = this->ir.CreateMul(lhs, rhs); break;
-                    case Tt::slash:    result = this->ir.CreateSDiv(lhs, rhs); break;
-                    case Tt::mod:      result = this->ir.CreateSRem(lhs, rhs); break;
-                    case Tt::plus:     result = this->ir.CreateAdd(lhs, rhs); break;
-                    case Tt::minus:    result = this->ir.CreateSub(lhs, rhs); break;
-                    case Tt::assign:
-                        result = this->ir.CreateStore(rhs, lhs);
-                        break;  // TODO: Pointer to left hand side?
-                    case Tt::bit_and:               result = this->ir.CreateAnd(lhs, rhs); break;
-                    case Tt::bit_or:                result = this->ir.CreateOr(lhs, rhs); break;
-                    case Tt::bit_xor:               result = this->ir.CreateXor(lhs, rhs); break;
-                    case Tt::left_shift:            result = this->ir.CreateShl(lhs, rhs); break;
-                    case Tt::right_shift:           result = this->ir.CreateLShr(lhs, rhs); break;  // TODO: LShr or AShr?
-                    case Tt::equal:                 result = this->ir.CreateICmp(CmpInst::ICMP_EQ, lhs, rhs); break;
-                    case Tt::inequal:               result = this->ir.CreateICmp(CmpInst::ICMP_NE, lhs, rhs); break;
-                    case Tt::greater_than_or_equal: result = this->ir.CreateICmp(CmpInst::ICMP_SGE, lhs, rhs); break;
-                    case Tt::greater_than:          result = this->ir.CreateICmp(CmpInst::ICMP_SGT, lhs, rhs); break;
-                    case Tt::less_than_or_equal:    result = this->ir.CreateICmp(CmpInst::ICMP_SLE, lhs, rhs); break;
-                    case Tt::less_than:             result = this->ir.CreateICmp(CmpInst::ICMP_SLT, lhs, rhs); break;
-                    case Tt::logical_and:           UNREACHED;  // TODO
-                    case Tt::logical_or:            UNREACHED;  // TODO
+                    case Tt::asterisk:              return this->ir.CreateMul(lhs, rhs); break;
+                    case Tt::slash:                 return this->ir.CreateSDiv(lhs, rhs); break;
+                    case Tt::mod:                   return this->ir.CreateSRem(lhs, rhs); break;
+                    case Tt::plus:                  return this->ir.CreateAdd(lhs, rhs); break;
+                    case Tt::minus:                 return this->ir.CreateSub(lhs, rhs); break;
+                    case Tt::assign:                return this->ir.CreateStore(rhs, lhs); break;  // TODO: Pointer to left hand side?
+                    case Tt::bit_and:               return this->ir.CreateAnd(lhs, rhs); break;
+                    case Tt::bit_or:                return this->ir.CreateOr(lhs, rhs); break;
+                    case Tt::bit_xor:               return this->ir.CreateXor(lhs, rhs); break;
+                    case Tt::left_shift:            return this->ir.CreateShl(lhs, rhs); break;
+                    case Tt::right_shift:           return this->ir.CreateLShr(lhs, rhs); break;  // TODO: LShr or AShr?
+                    case Tt::equal:                 return this->ir.CreateICmp(CmpInst::ICMP_EQ, lhs, rhs); break;
+                    case Tt::inequal:               return this->ir.CreateICmp(CmpInst::ICMP_NE, lhs, rhs); break;
+                    case Tt::greater_than_or_equal: return this->ir.CreateICmp(CmpInst::ICMP_SGE, lhs, rhs); break;
+                    case Tt::greater_than:          return this->ir.CreateICmp(CmpInst::ICMP_SGT, lhs, rhs); break;
+                    case Tt::less_than_or_equal:    return this->ir.CreateICmp(CmpInst::ICMP_SLE, lhs, rhs); break;
+                    case Tt::less_than:             return this->ir.CreateICmp(CmpInst::ICMP_SLT, lhs, rhs); break;
+                    case Tt::logical_and:           TODO;
+                    case Tt::logical_or:            TODO;
+
+                    default: UNREACHED;
+                }
+
+                break;
+            }
+
+            case SimpleTypeNode::Kind::unsigned_integer:
+            {
+                TODO;
+            }
+
+            case SimpleTypeNode::Kind::floatingpoint:
+            {
+                switch (bin_op->operator_type)
+                {
+                    case Tt::asterisk: return this->ir.CreateFMul(lhs, rhs); break;
+                    case Tt::slash:    return this->ir.CreateFDiv(lhs, rhs); break;
+                    case Tt::mod:      return this->ir.CreateFRem(lhs, rhs); break;
+                    case Tt::plus:     return this->ir.CreateFAdd(lhs, rhs); break;
+                    case Tt::minus:    return this->ir.CreateFSub(lhs, rhs); break;
+                    case Tt::assign:   return this->ir.CreateStore(rhs, lhs);
+
+                    // TODO: Read more about ordered and unordered floating point comparisons
+                    case Tt::equal:                 return this->ir.CreateFCmp(CmpInst::FCMP_OEQ, lhs, rhs); break;
+                    case Tt::inequal:               return this->ir.CreateFCmp(CmpInst::FCMP_ONE, lhs, rhs); break;
+                    case Tt::greater_than_or_equal: return this->ir.CreateFCmp(CmpInst::FCMP_OGE, lhs, rhs); break;
+                    case Tt::greater_than:          return this->ir.CreateFCmp(CmpInst::FCMP_OGT, lhs, rhs); break;
+                    case Tt::less_than_or_equal:    return this->ir.CreateFCmp(CmpInst::FCMP_OLE, lhs, rhs); break;
+                    case Tt::less_than:             return this->ir.CreateFCmp(CmpInst::FCMP_OLT, lhs, rhs); break;
                     default:                        UNREACHED;
                 }
             }
 
-            case SimpleTypeNode::Kind::unsigned_integer:
-            case SimpleTypeNode::Kind::floatingpoint:
-            case SimpleTypeNode::Kind::type:             break;
-
             default: UNREACHED;
         }
 
-        return result;
+        UNREACHED;
     }
 
     Value *generate_code(Node *node)
@@ -236,11 +267,6 @@ struct IrCompiler
             {
                 auto decl = static_cast<DeclarationNode *>(node);
 
-                if (decl->init_expression == nullptr)
-                {
-                    UNREACHED;
-                }
-
                 switch (decl->init_expression->kind)
                 {
                     case NodeKind::procedure:
@@ -254,9 +280,9 @@ struct IrCompiler
                         auto function_type = cast<FunctionType>(type);
                         this->function     = Function::Create(
                             function_type,
-                            GlobalValue::LinkageTypes::InternalLinkage,
+                            GlobalValue::LinkageTypes::ExternalLinkage,
                             decl->identifier,
-                            &this->module);
+                            this->module.get());
 
                         auto i = 0;
                         for (auto &arg : this->function->args())
@@ -266,10 +292,10 @@ struct IrCompiler
                         }
 
                         auto block =
-                            BasicBlock::Create(llvm_context, std::format("{}_entry", decl->identifier), function);
+                            BasicBlock::Create(this->llvm_context, std::format("{}_entry", decl->identifier), function);
                         this->ir.SetInsertPoint(block);  // TODO: Restore insert point when done?
                         this->generate_code(decl->init_expression);
-                        this->function->print(outs());
+                        // this->function->print(outs());
                         this->function = nullptr;
 
                         break;
@@ -279,7 +305,7 @@ struct IrCompiler
                     {
                         if (decl->is_global())
                         {
-                            UNREACHED;  // TODO: There are not global variables yet and they are not on the roadmap
+                            TODO;  // TODO: There are no global variables yet and they are not on the roadmap
                         }
                         else
                         {
@@ -302,19 +328,19 @@ struct IrCompiler
             {
                 auto ident = static_cast<IdentifierNode *>(node);
 
-                auto type  = convert_type(node->type);
-                auto local = ident->containing_block->find_local(ident->identifier);
-                if (local == std::nullopt)
-                {
-                    UNREACHED;  // TODO: Error message
-                }
+                auto type  = this->convert_type(node->type);
+                auto local = ident->containing_block->find_local(ident->identifier).value();
 
-                assert(local->location != nullptr);
+                assert(local.location != nullptr);
 
-                return this->ir.CreateLoad(type, local->location);
+                return this->ir.CreateLoad(type, local.location);
             }
 
-            case NodeKind::if_statement: UNREACHED;
+            case NodeKind::if_statement:
+            {
+                TODO;
+            }
+
             case NodeKind::literal:
             {
                 auto literal = static_cast<LiteralNode *>(node);
@@ -324,19 +350,40 @@ struct IrCompiler
 
                 switch (simple_type->type_kind)
                 {
-                    case SimpleTypeNode::Kind::invalid: UNREACHED;
-                    case SimpleTypeNode::Kind::voyd:    UNREACHED;
-                    case SimpleTypeNode::Kind::boolean: UNREACHED;
+                    case SimpleTypeNode::Kind::boolean:
+                    {
+                        auto value = std::get<bool>(literal->value);
+                        return ConstantInt::get(this->ir.getInt1Ty(), value);
+                    }
 
                     case SimpleTypeNode::Kind::signed_integer:
                     case SimpleTypeNode::Kind::unsigned_integer:
                     {
                         auto value = std::get<uint64_t>(literal->value);
-                        return ConstantInt::get(IntegerType::get(llvm_context, simple_type->size * 8), value);
+                        return ConstantInt::get(IntegerType::get(this->llvm_context, simple_type->size * 8), value);
                     }
 
-                    case SimpleTypeNode::Kind::floatingpoint: UNREACHED;
-                    case SimpleTypeNode::Kind::type:          UNREACHED;
+                    case SimpleTypeNode::Kind::floatingpoint:
+                    {
+                        switch (simple_type->size)
+                        {
+                            case 4:
+                            {
+                                auto value = std::get<float>(literal->value);
+                                return ConstantFP::get(this->llvm_context, APFloat{value});
+                            }
+
+                            case 8:
+                            {
+                                auto value = std::get<double>(literal->value);
+                                return ConstantFP::get(this->ir.getDoubleTy(), value);
+                            }
+
+                            default: UNREACHED;
+                        }
+                    }
+
+                    default: UNREACHED;
                 }
             }
 
@@ -350,9 +397,15 @@ struct IrCompiler
                 return nullptr;
             }
 
-            case NodeKind::procedure_call: UNREACHED;
+            case NodeKind::procedure_call:
+            {
+                UNREACHED;
+            }
 
-            case NodeKind::procedure_signature: UNREACHED;
+            case NodeKind::procedure_signature:
+            {
+                UNREACHED;
+            }
 
             case NodeKind::return_statement:
             {
@@ -392,11 +445,14 @@ struct IrCompiler
     }
 };
 
-std::string compile_to_ir(struct Node *node)
-{
-    IrCompiler ir_compiler{};
-    auto value = ir_compiler.generate_code(node);
-    // value->print(outs());
+IrCompilationResult::~IrCompilationResult() = default;
 
-    return "TODO";
+IrCompilationResult compile_to_ir(struct Node *node)
+{
+    auto llvm_context = std::make_unique<LLVMContext>();
+
+    IrCompiler ir_compiler{*llvm_context};
+    ir_compiler.generate_code(node);
+
+    return IrCompilationResult{std::move(llvm_context), std::move(ir_compiler.module)};
 }

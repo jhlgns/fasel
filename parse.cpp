@@ -3,7 +3,6 @@
 #include <charconv>
 #include <format>
 #include <iostream>
-#include <string>
 
 // TODO: The parsing functions should return an invalid parser on critical errors so that all parsing is cancelled
 
@@ -15,7 +14,7 @@ struct Parser
     }
 
     Lexer lexer;
-    const char *error_context;
+    const char *error_context{};
 
     void arm(const char *context) { this->error_context = context; }
 
@@ -337,7 +336,7 @@ Parser parse_primary_expr(Parser p, AstNode *&out_primary_expr)
         auto end    = token.pos.at + token.len;
         auto base   = 10;
         auto suffix = '\0';
-        std::from_chars_result result;
+        std::from_chars_result result{};
 
         auto is_hex = token.pos.at[0] == '0' && token.pos.at[1] == 'x';
         if (is_hex)
@@ -585,7 +584,7 @@ Parser parse_type(Parser p, AstNode *&out_type)
 {
     auto start = p;
 
-    Token identifier;
+    Token identifier{};
     if (p >>= p.quiet().parse_token(Tt::identifier, &identifier))
     {
         auto type        = new AstSimpleType{};
@@ -675,6 +674,8 @@ Parser parse_decl(Parser p, AstDeclaration &out_decl)
     {
         p.error(start, "Declaration without init expression needs a type");
     }
+
+    auto *test = &p;
 
     return p;
 }

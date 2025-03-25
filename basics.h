@@ -37,6 +37,13 @@ ScopeExit<F> operator+(DEFER_TAG, F &&f)
         std::abort();                                        \
     } while (false);
 
+#define TODO                                            \
+    do                                                  \
+    {                                                   \
+        std::cout << "TODO macro reached" << std::endl; \
+        std::abort();                                   \
+    } while (false);
+
 #define FATAL(message)                     \
     do                                     \
     {                                      \

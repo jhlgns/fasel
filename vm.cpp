@@ -5,17 +5,11 @@
 #include <format>
 #include <iostream>
 
-void fatal_error(std::string_view message)
-{
-    printf("Fatal VM error: %s\n", message.data());
-    abort();
-}
-
 void read_program(Vm *vm, void *data, size_t len)
 {
     if (vm->rip < Vm::program_start || vm->rip + len > vm->program_end())
     {
-        fatal_error("Read outside of program bounds");
+        FATAL("Read outside of program bounds");
     }
 
     memcpy(data, &vm->memory[vm->rip], len);
@@ -42,7 +36,7 @@ void write_memory(Vm *vm, int64_t address, const void *data, size_t len)
 {
     if (address < vm->stack_start() || address + len > vm->stack_end())
     {
-        fatal_error("Segfault");
+        FATAL("Segfault");
     }
 
     memcpy(&vm->memory[address], data, len);
@@ -52,7 +46,7 @@ void read_memory(Vm *vm, int64_t address, void *data, size_t len)
 {
     if (address < vm->program_start || address + len > vm->stack_end())
     {
-        fatal_error("Segfault");
+        FATAL("Segfault");
     }
 
     memcpy(data, &vm->memory[address], len);
@@ -62,7 +56,7 @@ void push(Vm *vm, const void *data, size_t len)
 {
     if (vm->rsp + len > vm->stack_end())
     {
-        fatal_error("Stack overflow");
+        FATAL("Stack overflow");
     }
 
     memcpy(&vm->memory[vm->rsp], data, len);
@@ -78,7 +72,7 @@ void pop(Vm *vm, void *data, size_t len)
 {
     if (vm->rsp < len || vm->rsp - len < vm->stack_start())
     {
-        fatal_error("Stack underflow");
+        FATAL("Stack underflow");
     }
 
     vm->rsp -= len;
@@ -114,7 +108,7 @@ void start_proc_call(Vm *vm, struct AstProgram *program, std::string_view proc_n
     // auto proc_decl = program->block.find_declaration(proc_name);
     // if (proc_decl == nullptr)
     // {
-    //     fatal_error(std::format("Procedure '{}' not found", proc_name));
+    //     FATAL(std::format("Procedure '{}' not found", proc_name));
     // }
 
     // start_proc_call(vm, proc_decl->address);
@@ -148,7 +142,7 @@ void run_program(Vm *vm)
 
             UNREACHED;
             // auto disasm =
-                // disassemble(std::span{&vm->memory[Vm::program_start], vm->program_length}, vm->rip - Vm::program_start);
+            // disassemble(std::span{&vm->memory[Vm::program_start], vm->program_length}, vm->rip - Vm::program_start);
             // std::cout << disasm << std::endl;
 
             std::string command;
@@ -284,13 +278,13 @@ void run_program(Vm *vm)
                 BINOP_CASE(CMPLT, <)
 #undef BINOP_CASE
 
-            default: fatal_error("Unimplemented instruction");
+            default: FATAL("Unimplemented instruction");
         }
     }
 
     if (vm->rip != vm->program_end())
     {
-        fatal_error("Decoding error: RIP is not at the end of the program");
+        FATAL("Decoding error: RIP is not at the end of the program");
     }
 }
 

@@ -1,8 +1,8 @@
-#include <assert.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cassert>
+#include <cstdarg>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 #include "basics.h"
 #include "parse.h"
@@ -10,21 +10,21 @@
 
 int main(int argc, char **argv)
 {
-    printf("This is the Janguage compiler.\n");
+    std::cout << "This is the Janguage compiler." << std::endl;
 
     if (argc != 2)
     {
-        fprintf(stderr, "Usage: jang <main source file>\n");
+        std::cerr << "Usage: jang <main source file>" << std::endl;
         return 1;
     }
 
     auto path = argv[1];
-    printf("Compiling file: %s\n", path);
+    std::cout << "Compiling file: " << path << std::endl;
 
     auto f = fopen(path, "r");
     if (f == nullptr)
     {
-        fprintf(stderr, "Could not open file %s", path);
+        std::cerr << "Could not open file " << path << std::endl;
         return 1;
     }
     defer
@@ -35,11 +35,7 @@ int main(int argc, char **argv)
     fseek(f, 0, SEEK_END);
     auto file_size = ftell(f);
     rewind(f);
-    auto source = static_cast<char *>(malloc(file_size + 1));
-    defer
-    {
-        free(source);
-    };
+    auto source       = std::make_unique<char[]>(file_size + 1);
     source[file_size] = 0;
 
     size_t pos  = 0;
@@ -48,10 +44,10 @@ int main(int argc, char **argv)
     {
     }
 
-    Lexer lexer{source};
+    Lexer lexer{source.get()};
 
     AstProgram program;
-    if (parse_program(source, program) == false)
+    if (parse_program(source.get(), program) == false)
     {
         std::cout << "Failed to parse program" << std::endl;
         return 1;
