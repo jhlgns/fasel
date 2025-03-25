@@ -10,11 +10,11 @@
 
 int main(int argc, char **argv)
 {
-    std::cout << "This is the Janguage compiler." << std::endl;
+    std::cout << "This is the fasel compiler." << std::endl;
 
     if (argc != 2)
     {
-        std::cerr << "Usage: jang <main source file>" << std::endl;
+        std::cerr << "Usage: fasel <main source file>" << std::endl;
         return 1;
     }
 

@@ -1,8 +1,8 @@
-# Janguage
+# Fasel
 
 > Early work in progress!
 
-Janguage is a programming language invented by me.
+Fasel is a programming language invented by me.
 
 Don't ask me what this is gonna be good for except for the learning process I am making through while writing this!
 

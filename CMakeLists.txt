@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(janguage LANGUAGES CXX)
+project(fasel LANGUAGES CXX)
 
 set(CMAKE_C_COMPILER /usr/local/bin/clang CACHE FILEPATH "" FORCE)
 set(CMAKE_CXX_COMPILER /usr/local/bin/clang++ CACHE FILEPATH "" FORCE)
@@ -33,17 +33,17 @@ set(shared_source_files
 # Compiler
 #
 
-add_executable(jang main.cpp ${shared_source_files})
+add_executable(fasel main.cpp ${shared_source_files})
 
-target_compile_definitions(jang PUBLIC ${LLVM_DEFINITIONS_LIST})
-target_include_directories(jang PUBLIC
+target_compile_definitions(fasel PUBLIC ${LLVM_DEFINITIONS_LIST})
+target_include_directories(fasel PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${LLVM_INCLUDE_DIRS})
-target_link_libraries(jang PUBLIC ${llvm_libs})
-# target_compile_features(jang PUBLIC cxx_std_20)
-target_compile_options(jang PUBLIC -Werror=switch)
-# target_compile_options(jang PUBLIC -fsanitize=address)
-# target_link_options(jang PUBLIC -fsanitize=address)
+target_link_libraries(fasel PUBLIC ${llvm_libs})
+# target_compile_features(fasel PUBLIC cxx_std_20)
+target_compile_options(fasel PUBLIC -Werror=switch)
+# target_compile_options(fasel PUBLIC -fsanitize=address)
+# target_link_options(fasel PUBLIC -fsanitize=address)
 
 #
 # Playground

@@ -122,7 +122,7 @@ void start_proc_call(Vm *vm, int64_t address)
 
 void run_program(Vm *vm)
 {
-    auto debug_mode = strcmp("1", std::getenv("JANG_DEBUG")) == 0;
+    auto debug_mode = strcmp("1", std::getenv("FASEL_DEBUG")) == 0;
 
     while (vm->rip < vm->program_end())
     {
