@@ -21,15 +21,15 @@ Some notes:
 
 ## The Pipeline - How It Will Work Roughly
 
-* **Lex**: source -> tokens
-* **Parse**: tokens -> AST
-* **Desugaring**: AST -> reduced AST
+* **Lex**: source → tokens
+* **Parse**: tokens → AST
+* **Desugaring**: AST → reduced AST
     * Loops are reduced to `if`'s with `goto`'s
     * `defer` statements are inserted before return statements
-* **Typecheck**: AST -> program nodes
+* **Typecheck**: AST → program nodes
     * The sizes of all variables are now known
-* (Potentially: **Optimize**: program nodes -> optimized program nodes)
-* **IR code generation**: program nodes -> LLVM IR code
+* (Potentially: **Optimize**: program nodes → optimized program nodes)
+* **IR code generation**: program nodes → LLVM IR code
 
 Compiled programs can then be built as standalone executables or compiled and run just-in-time.
 
@@ -37,12 +37,13 @@ NOTE: Maybe it is worth to convert the program nodes to [single static assignmen
 
 ## Notes On Building LLVM
 
-* Make sure your system wide default compiler is Clang++ with C++20 support such that `libc++` is linked as the C++ standard library when building this project
+* Make sure your system wide default compiler is Clang++ with C++20 support such that `libc++` is linked as the C++ standard library when building LLVM
     * On Debian systems use `update-alternatives` to set `cc`/`c++` → `clang++` and `clang++` → `clang++-21`
 
 ```bash
 # Build in debug (requires substantially more disk space!)
-cmake -S llvm \
+cmake \
+    -S llvm \
     -B build-debug \
     -G Ninja \
     -DCMAKE_BUILD_TYPE=Debug \
@@ -59,7 +60,8 @@ cmake -S llvm \
     cmake --install build-debug-clang --prefix /opt/llvm-debug
 
 # Build in release
-cmake -S llvm \
+cmake \
+    -S llvm \
     -B build-release \
     -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \

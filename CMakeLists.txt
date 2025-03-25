@@ -1,14 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
 project(fasel LANGUAGES CXX)
 
-set(CMAKE_C_COMPILER /usr/local/bin/clang CACHE FILEPATH "" FORCE)
-set(CMAKE_CXX_COMPILER /usr/local/bin/clang++ CACHE FILEPATH "" FORCE)
-set(CMAKE_LINKER_TYPE LLD CACHE STRING "" FORCE)
+# NOTE: Unfortunately, this needs to be here so that the correct compiler flags are used -
+# target_compile_features(... cxx_std_20) messes up the options for the standard library to use
 add_compile_options(-std=c++20 -stdlib=libc++)
 add_link_options(-std=c++20 -stdlib=libc++ -lc++abi)
 
 find_package(LLVM REQUIRED CONFIG)
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${LLVM_ROOT}/share/llvm/cmake")
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 llvm_map_components_to_libnames(llvm_libs support core irreader irprinter bitstreamreader demangle orcjit X86)
