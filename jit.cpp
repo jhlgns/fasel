@@ -36,15 +36,6 @@ void run_main_jit(std::unique_ptr<llvm::LLVMContext> &&context, std::unique_ptr<
     }
 
     auto execution_session = std::make_unique<ExecutionSession>(std::move(*executor_process_control));
-    defer
-    {
-        auto error = execution_session->endSession();
-        if (error)
-        {
-            std::cout << "Failed to end the execution session: " << toString(std::move(error)) << std::endl;
-            TODO;
-        }
-    };
 
     auto jit_target_machine_builder = JITTargetMachineBuilder::detectHost();
     if (!jit_target_machine_builder)
@@ -77,7 +68,6 @@ void run_main_jit(std::unique_ptr<llvm::LLVMContext> &&context, std::unique_ptr<
 
     auto &main_jit_dy_lib = execution_session->createBareJITDylib("<main>");
 
-    // NOTE: This is very weird - we have to move the llvm_context and the module here
     auto error = compile_layer.add(main_jit_dy_lib, ThreadSafeModule{std::move(module), std::move(context)});
     if (error)
     {
@@ -85,11 +75,10 @@ void run_main_jit(std::unique_ptr<llvm::LLVMContext> &&context, std::unique_ptr<
         TODO;
     }
 
-    auto &symbols = execution_session->getBootstrapSymbolsMap();
-    for (auto &[key, value] : symbols)
-    {
-        std::cout << "Symbol: " << key.data() << std::endl;
-    }
+    // std::cout << "--------------------------" << std::endl;
+    // std::cout << "Dump of execution session:" << std::endl;
+    // execution_session->dump(outs());
+    // std::cout << "--------------------------" << std::endl;
 
     auto main_symbol_def = execution_session->lookup({&main_jit_dy_lib}, mangle("main"));
     if (!main_symbol_def)
@@ -98,10 +87,17 @@ void run_main_jit(std::unique_ptr<llvm::LLVMContext> &&context, std::unique_ptr<
         TODO;
     }
 
-    auto main = main_symbol_def->getAddress().toPtr<int64_t (*)()>();
+    auto main = main_symbol_def->getAddress().toPtr<double (*)()>();
     assert(main != nullptr);
-    std::cout << main << std::endl;
+    std::cout << "main() is at " << reinterpret_cast<void *>(main) << std::endl;
+
     auto result = main();
 
-    std::cout << "Result: " << result << std::endl;
+    std::cout << "main() returned: " << result << std::endl;
+
+    if (auto error = execution_session->endSession(); error)
+    {
+        std::cout << "Failed to end the execution session: " << toString(std::move(error)) << std::endl;
+        TODO;
+    }
 }

@@ -383,6 +383,28 @@ bool TypeChecker::typecheck(Node *node)
 
                     bin_op->type = type;
 
+                    if (is_float)
+                    {
+                        // TODO: Test this
+                        if (types_equal(type, lhs_simple) == false)
+                        {
+                            auto cast              = new TypeCastNode{};
+                            cast->containing_block = bin_op->containing_block;
+                            cast->expression       = bin_op->lhs;
+                            cast->type             = type;
+                            bin_op->lhs            = cast;
+                        }
+
+                        if (types_equal(type, rhs_simple) == false)
+                        {
+                            auto cast              = new TypeCastNode{};
+                            cast->containing_block = bin_op->containing_block;
+                            cast->expression       = bin_op->rhs;
+                            cast->type             = type;
+                            bin_op->rhs            = cast;
+                        }
+                    }
+
                     return true;
                 }
 
@@ -768,6 +790,8 @@ bool TypeChecker::typecheck(Node *node)
 
             return true;
         }
+
+        case NodeKind::type_cast: UNREACHED;
     }
 
     UNREACHED;

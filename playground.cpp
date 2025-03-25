@@ -48,10 +48,10 @@ main := proc() i64 {
     float_var: f32 = 456f
 
     // TODO: Create implicit conversion node
-    //coerced := i64_var * float_var
+    coerced := i64_var * float_var
 
     //return 2 + i64_var * 3
-    return 56473810
+    return 2f * 3 / 1.5
 }
 )"sv;
 

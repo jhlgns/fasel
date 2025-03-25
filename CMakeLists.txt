@@ -21,14 +21,12 @@ endif()
 
 set(shared_source_files
     compile_ir.cpp
-    disasm.cpp
     jit.cpp
     lex.cpp
     memory_pool.cpp
     parse.cpp
     stringify.cpp
     typecheck.cpp
-    vm.cpp
     )
 
 #
@@ -70,13 +68,11 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/Catch2)
 
 add_executable(
     tests
-    compile_vm_test.cpp
     integration_tests.cpp
     lex_test.cpp
     parse_test.cpp
     string_util_test.cpp
     typecheck_test.cpp
-    vm_test.cpp
     ${shared_source_files}
     )
 target_compile_definitions(tests PUBLIC ${LLVM_DEFINITIONS_LIST})

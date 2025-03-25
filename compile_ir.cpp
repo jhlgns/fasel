@@ -27,7 +27,7 @@ struct IrCompiler
 {
     explicit IrCompiler(LLVMContext &llvm_context)
         : llvm_context{llvm_context}
-        , module{std::make_unique<Module>("JanguageTestModule", llvm_context)}
+        , module{std::make_unique<Module>("inmemory_temp_module", llvm_context)}
         , ir{llvm_context}
     {
     }
@@ -36,6 +36,7 @@ struct IrCompiler
     std::unique_ptr<Module> module;
     Function *function{};
     IRBuilder<llvm::NoFolder> ir;
+    // IRBuilder<> ir;
 
     void allocate_locals(BlockNode *block)
     {
@@ -418,6 +419,82 @@ struct IrCompiler
 
                 auto value = this->generate_code(retyrn->expression);
                 return this->ir.CreateRet(value);
+            }
+
+            case NodeKind::type_cast:
+            {
+                auto cast = static_cast<TypeCastNode *>(node);
+
+                auto dest_simple_type = node_cast<SimpleTypeNode, true>(cast->type);
+                auto src_simple_type  = node_cast<SimpleTypeNode, true>(cast->expression->type);
+
+                assert(dest_simple_type->type_kind == SimpleTypeNode::Kind::floatingpoint);
+
+                auto expression_value = this->generate_code(cast->expression);
+                auto dest_type        = this->convert_type(dest_simple_type);
+
+                assert(dest_type->isFloatingPointTy());
+
+                switch (src_simple_type->type_kind)
+                {
+                    case SimpleTypeNode::Kind::boolean: UNREACHED;
+
+                    case SimpleTypeNode::Kind::signed_integer:
+                    {
+                        switch (dest_simple_type->type_kind)
+                        {
+                            case SimpleTypeNode::Kind::floatingpoint:
+                            {
+                                return this->ir.CreateSIToFP(expression_value, dest_type, "itof");
+                            }
+
+                            default: TODO;
+                        }
+                    }
+
+                    case SimpleTypeNode::Kind::unsigned_integer:
+                    {
+                        switch (dest_simple_type->type_kind)
+                        {
+                            case SimpleTypeNode::Kind::floatingpoint:
+                            {
+                                return this->ir.CreateUIToFP(expression_value, dest_type, "utof");
+                            }
+
+                            default: TODO;
+                        }
+                    }
+
+                    case SimpleTypeNode::Kind::floatingpoint:
+                    {
+                        switch (dest_simple_type->type_kind)
+                        {
+                            case SimpleTypeNode::Kind::floatingpoint:
+                            {
+                                switch (src_simple_type->size)
+                                {
+                                    case 4:
+                                    {
+                                        assert(dest_simple_type->size == 8);
+                                        return this->ir.CreateFPExt(expression_value, dest_type, "ftod");
+                                    }
+
+                                    case 8:
+                                    {
+                                        assert(dest_simple_type->size == 4);
+                                        return this->ir.CreateFPTrunc(expression_value, dest_type, "dtof");
+                                    }
+
+                                    default: UNREACHED;
+                                }
+                            }
+
+                            default: TODO;
+                        }
+                    }
+
+                    default: UNREACHED;
+                }
             }
 
             case NodeKind::program:

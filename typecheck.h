@@ -21,6 +21,7 @@ enum class NodeKind
     procedure_call,
     procedure_signature,
     return_statement,
+    type_cast,
     program,
     simple_type,
     pointer_type,
@@ -188,6 +189,11 @@ struct ProcedureCallNode : NodeOfKind<NodeKind::procedure_call>
 };
 
 struct ReturnNode : NodeOfKind<NodeKind::return_statement>
+{
+    Node *expression{};
+};
+
+struct TypeCastNode : NodeOfKind<NodeKind::type_cast>
 {
     Node *expression{};
 };
