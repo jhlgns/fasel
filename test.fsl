@@ -1,4 +1,5 @@
 // TODO: Make sure the order of declaration does not matter
+// TODO: Make sure global procedure declarations are const
 
 exit := proc(status: i64) void external  // TODO: Implement type casting
 printf := proc(xxx: i64) i32 external

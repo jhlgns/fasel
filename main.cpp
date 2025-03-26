@@ -65,9 +65,9 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    for (auto [name, symbol] : program_node->block->symbols)
+    for (auto [name, decl] : program_node->block->declarations)
     {
-        std::cout << "XXX Found global symbol: " << name << " (" << type_to_string(symbol.declaration->init_expression->type) << ")"
+        std::cout << "XXX Found global symbol: " << name << " (" << type_to_string(decl->init_expression->type) << ")"
                   << std::endl;
     }
 

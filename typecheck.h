@@ -33,7 +33,7 @@ enum class NodeKind
 struct Node
 {
     NodeKind kind{};
-    const Node *type{};  // (type != nullptr) == (node is an expression)
+    const Node *type{};  // (type != nullptr) <=> (node is an expression)
     BlockNode *containing_block{};
     int64_t time =
         -1;  // The index of this statement within its containing block + 1 (if this node is not a statement, this stays -1)
@@ -122,10 +122,13 @@ namespace llvm
     class Value;
 }
 
-struct Symbol
+struct DeclarationNode : NodeOfKind<NodeKind::declaration>
 {
-    struct DeclarationNode *declaration{};
-    llvm::Value *value{};
+    std::string_view identifier{};
+    Node *specified_type{};
+    Node *init_expression{};
+
+    llvm::Value *named_value{};
 };
 
 struct BlockNode : NodeOfKind<NodeKind::block>
@@ -136,20 +139,11 @@ struct BlockNode : NodeOfKind<NodeKind::block>
     // int64_t memory_size_of_args{};  // Size of all procedure arguments
     int64_t current_time{};  // TODO: Document
 
-    std::unordered_map<std::string, Symbol> symbols{};
+    std::unordered_map<std::string, DeclarationNode *> declarations{};
 
     inline bool is_global() const { return this->containing_block == nullptr; }
 
-    std::optional<Symbol> find_local(std::string_view name) const;
-};
-
-struct DeclarationNode : NodeOfKind<NodeKind::declaration>
-{
-    std::string_view identifier{};
-    Node *specified_type{};
-    Node *init_expression{};
-
-    bool is_global() const { return this->containing_block->containing_block == nullptr; }
+    DeclarationNode *find_declaration(std::string_view name) const;
 };
 
 struct IdentifierNode : NodeOfKind<NodeKind::identifier>
@@ -199,6 +193,7 @@ struct TypeCastNode : NodeOfKind<NodeKind::type_cast>
     Node *expression{};
 };
 
+// TODO: Rename to module
 struct ProgramNode : NodeOfKind<NodeKind::program>
 {
     BlockNode *block{};

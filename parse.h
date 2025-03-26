@@ -174,6 +174,7 @@ struct AstProcedureCall : AstOfKind<AstKind::procedure_call>
     std::vector<AstNode *> arguments{};
 };
 
+// TODO: Rename to module
 struct AstProgram : AstOfKind<AstKind::program>
 {
     AstBlock block{};

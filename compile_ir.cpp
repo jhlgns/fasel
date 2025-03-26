@@ -62,13 +62,8 @@ struct IrCompiler
 
             if (auto decl = node_cast<DeclarationNode>(statement))
             {
-                auto it = block->symbols.find(std::string{decl->identifier});
-                assert(it != block->symbols.end());
-
-                // NOTE: This does not handle scope overlapping (phi allocations)
-
-                auto type        = this->convert_type(decl->init_expression->type);
-                it->second.value = this->ir.CreateAlloca(type, nullptr, decl->identifier);
+                auto type         = this->convert_type(decl->init_expression->type);
+                decl->named_value = this->ir.CreateAlloca(type, nullptr, decl->identifier);
             }
         }
     }
@@ -273,7 +268,8 @@ struct IrCompiler
                 {
                     case NodeKind::procedure:
                     {
-                        assert(decl->is_global());  // TODO: Transform local procedure declarations to global ones
+                        // TODO: Transform local procedure declarations to global ones
+                        assert(decl->containing_block->is_global());
                         assert(this->function == nullptr);
 
                         auto procedure = node_cast<ProcedureNode, true>(decl->init_expression);
@@ -300,9 +296,7 @@ struct IrCompiler
                             this->generate_code(decl->init_expression);
                         }
 
-                        auto it = decl->containing_block->symbols.find(std::string{decl->identifier});
-                        assert(it != decl->containing_block->symbols.end());
-                        it->second.value = this->function;
+                        decl->named_value = this->function;
 
                         this->function = nullptr;
 
@@ -311,17 +305,16 @@ struct IrCompiler
 
                     default:
                     {
-                        if (decl->is_global())
+                        if (decl->containing_block->is_global())
                         {
                             TODO;  // TODO: There are no global variables yet and they are not on the roadmap
                         }
                         else
                         {
-                            auto value = this->generate_code(decl->init_expression);
-                            auto local = decl->containing_block->find_local(decl->identifier);
-                            assert(local != std::nullopt);
+                            // Declaration assignment to init expresion
 
-                            this->ir.CreateStore(value, local->value);
+                            auto value = this->generate_code(decl->init_expression);
+                            this->ir.CreateStore(value, decl->named_value);
                         }
 
                         // TODO
@@ -336,17 +329,17 @@ struct IrCompiler
             {
                 auto ident = static_cast<IdentifierNode *>(node);
 
-                auto type  = this->convert_type(node->type);
-                auto local = ident->containing_block->find_local(ident->identifier).value();
+                auto type = this->convert_type(node->type);
+                auto decl = ident->containing_block->find_declaration(ident->identifier);
 
-                assert(local.value != nullptr);
+                assert(decl->named_value != nullptr);
 
                 if (is_store)
                 {
-                    return local.value;
+                    return decl->named_value;
                 }
 
-                return this->ir.CreateLoad(type, local.value);
+                return this->ir.CreateLoad(type, decl->named_value);
             }
 
             case NodeKind::if_statement:
@@ -416,12 +409,13 @@ struct IrCompiler
                 auto call = static_cast<ProcedureCallNode *>(node);
 
                 assert(call->procedure->kind == NodeKind::identifier);  // TODO: Function pointer calling
-                auto ident = static_cast<IdentifierNode *>(call->procedure);
-                auto proc_var =
-                    call->containing_block->find_local(ident->identifier).value();  // TODO: Rename find_local
-                assert(proc_var.value != nullptr);
-                assert(proc_var.declaration->init_expression->kind == NodeKind::procedure);
-                auto proc = static_cast<ProcedureNode *>(proc_var.declaration->init_expression);
+                auto ident     = static_cast<IdentifierNode *>(call->procedure);
+                auto proc_decl = call->containing_block->find_declaration(ident->identifier);
+                assert(
+                    proc_decl->named_value !=
+                    nullptr);  // TODO: Implement on-demand node compilation with something like ensure_compiled(Node *node)
+                assert(proc_decl->init_expression->kind == NodeKind::procedure);
+                auto proc = static_cast<ProcedureNode *>(proc_decl->init_expression);
 
                 auto type = cast<FunctionType>(this->convert_type(proc->signature));
 
@@ -432,7 +426,7 @@ struct IrCompiler
                     arguments.push_back(argument_value);
                 }
 
-                return this->ir.CreateCall(type, proc_var.value, arguments);
+                return this->ir.CreateCall(type, proc_decl->named_value, arguments);
             }
 
             case NodeKind::procedure_signature:
