@@ -9,8 +9,8 @@
             "request": "launch",
             "preLaunchTask": "build-debug",
             "name": "Debug compiler",
-            "program": "${workspaceFolder}/build-debug/jang",
-            "args": ["../example.jan"],
+            "program": "${workspaceFolder}/build-debug/fasel",
+            "args": ["../test.fsl"],
             "cwd": "${workspaceFolder}/build-debug"
         },
         {

@@ -1,5 +1,5 @@
 ---
-Checks:          'clang-diagnostic-*,clang-analyzer-*,hicpp-*,!hicpp-special-member-functions'
+Checks:          'clang-diagnostic-*,clang-analyzer-*,hicpp-*,-hicpp-special-member-functions,-hicpp-uppercase-literal-suffix,-hicpp-avoid-c-arrays'
 WarningsAsErrors: ''
 HeaderFileExtensions:
   - ''

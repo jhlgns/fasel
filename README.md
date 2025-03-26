@@ -33,8 +33,6 @@ Some notes:
 
 Compiled programs can then be built as standalone executables or compiled and run just-in-time.
 
-NOTE: Maybe it is worth to convert the program nodes to [single static assignment form](https://en.wikipedia.org/wiki/Static_single-assignment_form) before code generation.
-
 ## Notes On Building LLVM
 
 * Make sure your system wide default compiler is Clang++ with C++20 support such that `libc++` is linked as the C++ standard library when building LLVM
@@ -56,8 +54,8 @@ cmake \
     -DCMAKE_COMPILE_FLAGS="-std=c++20 -stdlib=libc++" \
     -DCMAKE_LINK_FLAGS="-std=c++20 -stdlib=libc++" \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=1 && \
-    cmake --build build-debug-clang && \
-    cmake --install build-debug-clang --prefix /opt/llvm-debug
+    cmake --build build-debug && \
+    cmake --install build-debug --prefix /opt/llvm-debug
 
 # Build in release
 cmake \
@@ -74,6 +72,6 @@ cmake \
     -DCMAKE_COMPILE_FLAGS="-std=c++20 -stdlib=libc++" \
     -DCMAKE_LINK_FLAGS="-std=c++20 -stdlib=libc++" \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=1 && \
-    cmake --build build-debug-clang && \
-    cmake --install build-debug-clang --prefix /opt/llvm-debug
+    cmake --build build-release && \
+    cmake --install build-release --prefix /opt/llvm-release
 ```

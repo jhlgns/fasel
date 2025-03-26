@@ -4,6 +4,7 @@
 
 using Types = BuiltinTypes;
 
+// NOTE: For every call to TypeChecker::error() there must be a test case in here
 
 void test_type(AstNode *ast, const Node *expected_type)
 {
@@ -145,6 +146,11 @@ TEST_CASE("Binary operators", "[typecheck]")
     };
 }
 
+TEST_CASE("Binary operator coercion implicit type cast", "[typecheck]")
+{
+    // TODO: Test that TypeCastNodes are inserted upon implicit type coercion
+}
+
 TEST_CASE("Identifiers - declared in parent block", "[typecheck]")
 {
     SECTION("Found")
@@ -153,7 +159,9 @@ TEST_CASE("Identifiers - declared in parent block", "[typecheck]")
 
         BlockNode parent_block{};
         // TODO: This is very janky
-        type_checker.current_procedure_body = &parent_block;
+        ProcedureNode proc;
+        proc.body                      = &parent_block;
+        type_checker.current_procedure = &proc;
 
         auto decl              = new DeclarationNode{};
         decl->containing_block = &parent_block;
@@ -183,7 +191,9 @@ TEST_CASE("Identifiers - declared in parent block", "[typecheck]")
 
         BlockNode parent_block{};
         // TODO: This is very janky
-        type_checker.current_procedure_body = &parent_block;
+        ProcedureNode proc;
+        proc.body                      = &parent_block;
+        type_checker.current_procedure = &proc;
 
         auto decl              = new DeclarationNode{};
         decl->containing_block = &parent_block;
@@ -214,7 +224,9 @@ TEST_CASE("Identifiers - uninitialized, with explicit type", "[typecheck]")
         TypeChecker type_checker;
 
         BlockNode block{};
-        type_checker.current_procedure_body = &block;
+        ProcedureNode proc;
+        proc.body                      = &block;
+        type_checker.current_procedure = &proc;
 
         auto decl              = new DeclarationNode{};
         decl->containing_block = &block;
@@ -237,7 +249,9 @@ TEST_CASE("Identifiers - uninitialized, with explicit type", "[typecheck]")
         TypeChecker type_checker;
 
         BlockNode block{};
-        type_checker.current_procedure_body = &block;
+        ProcedureNode proc;
+        proc.body                      = &block;
+        type_checker.current_procedure = &proc;
 
         auto decl              = new DeclarationNode{};
         decl->containing_block = &block;
@@ -262,7 +276,9 @@ TEST_CASE("Identifiers - initialized, without explicit type", "[typecheck]")
         TypeChecker type_checker;
 
         BlockNode block{};
-        type_checker.current_procedure_body = &block;
+        ProcedureNode proc;
+        proc.body                      = &block;
+        type_checker.current_procedure = &proc;
 
         LiteralNode init_expression{};
         init_expression.value.emplace<bool>(true);
@@ -288,7 +304,9 @@ TEST_CASE("Identifiers - initialized, without explicit type", "[typecheck]")
         TypeChecker type_checker;
 
         BlockNode block{};
-        type_checker.current_procedure_body = &block;
+        ProcedureNode proc;
+        proc.body                      = &block;
+        type_checker.current_procedure = &proc;
 
         LiteralNode init_expression{};
         init_expression.value.emplace<bool>(true);
@@ -355,6 +373,12 @@ TEST_CASE("Procedures", "[typecheck]")
     expected_type->return_type = const_cast<SimpleTypeNode *>(&Types::voyd);
 
     test_type(proc, expected_type);
+}
+
+TEST_CASE("Return expression", "[typecheck]")
+{
+    // TODO: Test that the return expression must match the procedure return type
+    // or that the return expression is a NopNode if the procedure return type is void
 }
 
 TEST_CASE("Procedure calls", "[typecheck]")

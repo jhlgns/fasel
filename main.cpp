@@ -5,8 +5,11 @@
 #include <cstring>
 
 #include "basics.h"
+#include "compile_ir.h"
+#include "jit.h"
 #include "parse.h"
 #include "typecheck.h"
+#include "llvm/IR/Module.h"
 
 int main(int argc, char **argv)
 {
@@ -44,48 +47,37 @@ int main(int argc, char **argv)
     {
     }
 
-    Lexer lexer{source.get()};
-
+    // 1. Parsing
     AstProgram program;
     if (parse_program(source.get(), program) == false)
     {
-        std::cout << "Failed to parse program" << std::endl;
+        std::cout << "Parsing failed" << std::endl;
         return 1;
     }
 
-    auto node = make_node(nullptr, &program);
+    // 2. Typechecking
+    auto program_node = make_node(nullptr, &program);
 
-// #if 0
-//     printf("Dumping tokens\n");
-//     Token token;
-//     while (true)
-//     {
-//         token = next_token(&l);
-//         printf("Line %d char %d: %s ", (int)token.line, (int)token.line_offset, to_string(token.type));
-//         if (token.len > 0)
-//             fwrite(l.start, 1, l.at - l.start, stdout);
-//         printf("\n");
+    TypeChecker type_checker{.print_errors = true};
+    if (type_checker.typecheck(program_node) == false)
+    {
+        std::cout << "Typechecking failed" << std::endl;
+        return 1;
+    }
 
-//         if (token.type == Tt::EOF)
-//         {
-//             break;
-//         }
-//     }
-// #else
-//     AstProgram program{};
-//     if (parse_program(source, program) == false)
-//     {
-//         return 1;
-//     }
+    // 3. Compile to IR
+    auto compilation_result = compile_to_ir(program_node);
+    compilation_result.module->print(llvm::outs(), nullptr);
 
-//     /* printf("Program:\n%s\n", dump_node(0, &program).data()); */
+    // 4. Run JIT
+    Jit jit{};
+    jit.add_module(std::move(compilation_result.context), std::move(compilation_result.module));
+    auto main_address = jit.get_symbol_address("main");
+    auto main         = reinterpret_cast<void (*)()>(main_address);
 
-//     // BytecodeWriter w{};
-//     // if (generate_code(&program.block, &w) == false)
-//     // {
-//     //     return 1;
-//     // }
-// #endif
+    main();
+
+    std::cout << "Done" << std::endl;
 
     return 0;
 }

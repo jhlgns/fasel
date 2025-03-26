@@ -1,3 +1,4 @@
+
 #include "compile_ir.h"
 #include "jit.h"
 #include "parse.h"
@@ -40,7 +41,7 @@ main := proc()
 using namespace llvm;
 
 auto source = R"(
-main := proc() i64 {
+main := proc() f32 {
     i64_var := 123
     // TODO: Fix the store instruction emission (needs a pointer, gets something else currently)
     //i64_var = i64_var * 2
@@ -59,6 +60,7 @@ using namespace llvm;
 
 int main(int argc, char **argv)
 {
+#if 0
     // 1. Parsing
     AstProgram program;
     if (parse_program(source, program) == false)
@@ -85,4 +87,5 @@ int main(int argc, char **argv)
     run_main_jit(std::move(compilation_result.context), std::move(compilation_result.module));
 
     std::cout << "Done" << std::endl;
+#endif
 }

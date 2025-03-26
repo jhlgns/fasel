@@ -273,6 +273,8 @@ struct BuiltinTypes
     static const SimpleTypeNode boolean;
     static const SimpleTypeNode type;
 
+    static const ProcedureSignatureNode main_type;
+
     static const std::vector<std::tuple<const Node *, std::string_view>> type_names;
 };
 
@@ -280,8 +282,9 @@ Node *make_node(BlockNode *containing_block, AstNode *ast);
 
 struct TypeChecker
 {
+    DeclarationNode *current_declaration{};
     bool print_errors = false;
-    BlockNode *current_procedure_body{};
+    ProcedureNode *current_procedure{};
 
     [[nodiscard]] bool typecheck(Node *node);
 

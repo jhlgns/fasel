@@ -176,10 +176,7 @@ Parser parse_statement(Parser p, AstNode *&out_statement)
         p.arm("parsing return statement");
 
         AstReturn retyrn{};
-        if (!(p >>= parse_expr(p, retyrn.expression)))
-        {
-            return start;
-        }
+        p >>= parse_expr(p, retyrn.expression);  // Empty return for void
 
         out_statement = new AstReturn{std::move(retyrn)};
         return p;

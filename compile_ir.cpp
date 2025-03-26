@@ -162,7 +162,8 @@ struct IrCompiler
 
     Value *generate_binary_operator_code(BinaryOperatorNode *bin_op)
     {
-        auto lhs = this->generate_code(bin_op->lhs);
+        auto is_store = bin_op->operator_type == Tt::assign;
+        auto lhs      = this->generate_code(bin_op->lhs, is_store);
         if (lhs == nullptr)
         {
             UNREACHED;
@@ -242,7 +243,7 @@ struct IrCompiler
         UNREACHED;
     }
 
-    Value *generate_code(Node *node)
+    Value *generate_code(Node *node, bool is_store = false)
     {
         switch (node->kind)
         {
@@ -333,6 +334,11 @@ struct IrCompiler
                 auto local = ident->containing_block->find_local(ident->identifier).value();
 
                 assert(local.location != nullptr);
+
+                if (is_store)
+                {
+                    return local.location;
+                }
 
                 return this->ir.CreateLoad(type, local.location);
             }

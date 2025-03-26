@@ -385,7 +385,6 @@ bool TypeChecker::typecheck(Node *node)
 
                     if (is_float)
                     {
-                        // TODO: Test this
                         if (types_equal(type, lhs_simple) == false)
                         {
                             auto cast              = new TypeCastNode{};
@@ -506,14 +505,16 @@ bool TypeChecker::typecheck(Node *node)
 
         case NodeKind::block:
         {
+            // TODO: Check somehow that the procedure contains a return statement
+
             auto block = static_cast<BlockNode *>(node);
 
             for (auto statement : block->statements)
             {
-                if (this->current_procedure_body != nullptr)
+                if (this->current_procedure != nullptr)
                 {
                     // NOTE: While typechecking the program root block, current_procedure_body is nullptr
-                    statement->time = ++this->current_procedure_body->current_time;
+                    statement->time = ++this->current_procedure->body->current_time;
                 }
 
                 if (typecheck(statement) == false)
@@ -528,6 +529,13 @@ bool TypeChecker::typecheck(Node *node)
         case NodeKind::declaration:
         {
             auto decl = static_cast<DeclarationNode *>(node);
+
+            auto old_decl             = this->current_declaration;
+            this->current_declaration = decl;
+            defer
+            {
+                this->current_declaration = old_decl;
+            };
 
             if (decl->containing_block->find_local(decl->identifier) != std::nullopt)
             {
@@ -666,11 +674,24 @@ bool TypeChecker::typecheck(Node *node)
                 return false;
             }
 
-            auto old_body                = this->current_procedure_body;
-            this->current_procedure_body = proc->body;
+            if (this->current_declaration->identifier == "main")
+            {
+                if (types_equal(&BuiltinTypes::main_type, proc->signature) == false)
+                {
+                    this->error(
+                        proc,
+                        std::format(
+                            "The main procedure must be of type proc() void, received {}",
+                            type_to_string(proc->signature)));
+                    return false;
+                }
+            }
+
+            auto old_procedure      = this->current_procedure;
+            this->current_procedure = proc;
             defer
             {
-                this->current_procedure_body = old_body;
+                this->current_procedure = old_procedure;
             };
 
             if (typecheck(proc->body) == false)
@@ -754,8 +775,24 @@ bool TypeChecker::typecheck(Node *node)
         {
             auto retyrn = static_cast<ReturnNode *>(node);
 
-            if (typecheck(retyrn->expression) == false)
+            if (retyrn->expression->kind == NodeKind::nop)
             {
+                retyrn->type = &BuiltinTypes::voyd;
+                return true;
+            }
+            else if (typecheck(retyrn->expression) == false)
+            {
+                return false;
+            }
+
+            if (types_equal(retyrn->expression->type, this->current_procedure->signature->return_type) == false)
+            {
+                this->error(
+                    retyrn,
+                    std::format(
+                        "The type of the return expression ({}) does not match the procedure return type ({})",
+                        type_to_string(retyrn->expression->type),
+                        type_to_string(this->current_procedure->signature->return_type)));
                 return false;
             }
 
@@ -924,6 +961,9 @@ std::string type_to_string(const Node *type)
                 }
             }
 
+            result += ") ";
+            result += type_to_string(signature->return_type);
+
             return result;
         }
 
@@ -979,6 +1019,13 @@ const SimpleTypeNode BuiltinTypes::f32     = SimpleTypeNode{SimpleTypeNode::Kind
 const SimpleTypeNode BuiltinTypes::f64     = SimpleTypeNode{SimpleTypeNode::Kind::floatingpoint, 8};
 const SimpleTypeNode BuiltinTypes::boolean = SimpleTypeNode{SimpleTypeNode::Kind::boolean, 1};
 const SimpleTypeNode BuiltinTypes::type    = SimpleTypeNode{SimpleTypeNode::Kind::type, -1};
+
+const ProcedureSignatureNode BuiltinTypes::main_type = []
+{
+    ProcedureSignatureNode result;
+    result.return_type = const_cast<SimpleTypeNode *>(&BuiltinTypes::voyd);
+    return result;
+}();
 
 const std::vector<std::tuple<const Node *, std::string_view>> BuiltinTypes::type_names = {
     std::make_tuple(&BuiltinTypes::voyd, "void"),
