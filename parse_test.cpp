@@ -1,6 +1,8 @@
 #include "parse.h"
 #include <catch2/catch_test_macros.hpp>
 
+// TODO: proc external test
+
 namespace assertions
 {
     template<typename T>
@@ -8,7 +10,7 @@ namespace assertions
 
     struct Nop
     {
-        void operator()(auto) { }
+        void operator()(auto arg) { }
     };
 
     struct IsNull

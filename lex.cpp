@@ -211,8 +211,8 @@ Token Lexer::next_token()
     if (this->cursor.at > start.at)
     {
         std::string_view text{start.at, this->cursor.at};
-        auto is_keyword = text == "return" || text == "while" || text == "proc" || text == "else" || text == "if" ||
-                          text == "true" || text == "false";
+        auto is_keyword = text == "external" || text == "return" || text == "while" || text == "proc" ||
+                          text == "else" || text == "if" || text == "true" || text == "false";
         if (is_keyword)
         {
             return emit(*this, start, Tt::keyword);

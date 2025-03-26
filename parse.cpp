@@ -306,6 +306,12 @@ Parser parse_proc(Parser p, AstProcedure &out_proc)
 
     p.arm("parsing procedure");
 
+    if (p >>= p.quiet().parse_keyword("external"))
+    {
+        out_proc.is_external = true;
+        return p;
+    }
+
     out_proc.body.is_proc_body = true;
     if (!(p >>= parse_block(p, out_proc.body)))
     {
@@ -505,7 +511,7 @@ Parser parse_expression_suffix(Parser p, AstNode *lhs, AstNode **node)
                 break;
             }
 
-            AstNode *argument;
+            AstNode *argument{};
             if (!(p >>= parse_expr(p, argument)))
             {
                 return start;

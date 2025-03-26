@@ -1,11 +1,18 @@
+// TODO: Make sure the order of declaration does not matter
+
+exit := proc(status: i64) void external  // TODO: Implement type casting
+printf := proc(xxx: i64) i32 external
+
 main := proc() void {
     i64_var := 123
-    // TODO: Fix the store instruction emission (needs a pointer, gets something else currently)
     i64_var = i64_var * 2
 
     float_var: f32 = 456f
 
     coerced := i64_var * float_var
+
+    exit(123)
+    printf(0)
 
     return
 }

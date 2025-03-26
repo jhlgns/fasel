@@ -122,10 +122,10 @@ namespace llvm
     class Value;
 }
 
-struct LocalVariable
+struct Symbol
 {
     struct DeclarationNode *declaration{};
-    llvm::Value *location{};
+    llvm::Value *value{};
 };
 
 struct BlockNode : NodeOfKind<NodeKind::block>
@@ -136,11 +136,11 @@ struct BlockNode : NodeOfKind<NodeKind::block>
     // int64_t memory_size_of_args{};  // Size of all procedure arguments
     int64_t current_time{};  // TODO: Document
 
-    std::unordered_map<std::string, LocalVariable> locals{};
+    std::unordered_map<std::string, Symbol> symbols{};
 
     inline bool is_global() const { return this->containing_block == nullptr; }
 
-    std::optional<LocalVariable> find_local(std::string_view name) const;
+    std::optional<Symbol> find_local(std::string_view name) const;
 };
 
 struct DeclarationNode : NodeOfKind<NodeKind::declaration>
@@ -180,6 +180,7 @@ struct ProcedureNode : NodeOfKind<NodeKind::procedure>
 {
     ProcedureSignatureNode *signature{};
     BlockNode *body{};
+    bool is_external{};
 };
 
 struct ProcedureCallNode : NodeOfKind<NodeKind::procedure_call>
@@ -272,8 +273,7 @@ struct BuiltinTypes
     static const SimpleTypeNode f64;
     static const SimpleTypeNode boolean;
     static const SimpleTypeNode type;
-
-    static const ProcedureSignatureNode main_type;
+    static const ProcedureSignatureNode main_signature;
 
     static const std::vector<std::tuple<const Node *, std::string_view>> type_names;
 };

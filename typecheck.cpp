@@ -58,10 +58,10 @@ BinaryOperatorCategory bin_op_category(TokenType type)
     }
 }
 
-std::optional<LocalVariable> BlockNode::find_local(std::string_view name) const
+std::optional<Symbol> BlockNode::find_local(std::string_view name) const
 {
-    auto it = this->locals.find(std::string{name});
-    if (it != this->locals.end())
+    auto it = this->symbols.find(std::string{name});
+    if (it != this->symbols.end())
     {
         return it->second;
     }
@@ -188,10 +188,16 @@ Node *make_node_internal(BlockNode *containing_block, AstNode *ast)
 
             auto result       = new ProcedureNode{};
             result->signature = node_cast<ProcedureSignatureNode, true>(make_node(containing_block, &proc->signature));
-            result->body      = node_cast<BlockNode, true>(make_node(containing_block, &proc->body));
-
             assert(result->signature != nullptr);
-            assert(result->body != nullptr);
+
+            result->is_external = proc->is_external;
+
+            if (proc->is_external == false)
+            {
+                result->body = node_cast<BlockNode, true>(make_node(containing_block, &proc->body));
+                assert(result->body != nullptr);
+            }
+
 
             return result;
         }
@@ -543,8 +549,8 @@ bool TypeChecker::typecheck(Node *node)
                 return false;
             }
 
-            auto [it, ok] = decl->containing_block->locals.insert(
-                std::make_pair(std::string{decl->identifier}, LocalVariable{.declaration = decl}));
+            auto [it, ok] = decl->containing_block->symbols.insert(
+                std::make_pair(std::string{decl->identifier}, Symbol{.declaration = decl}));
             assert(ok);
 
             if (typecheck(decl->init_expression) == false)
@@ -676,27 +682,31 @@ bool TypeChecker::typecheck(Node *node)
 
             if (this->current_declaration->identifier == "main")
             {
-                if (types_equal(&BuiltinTypes::main_type, proc->signature) == false)
+                if (types_equal(&BuiltinTypes::main_signature, proc->signature) == false)
                 {
                     this->error(
                         proc,
                         std::format(
-                            "The main procedure must be of type proc() void, received {}",
+                            "The main procedure must be of type {}, received {}",
+                            type_to_string(&BuiltinTypes::main_signature),
                             type_to_string(proc->signature)));
                     return false;
                 }
             }
 
-            auto old_procedure      = this->current_procedure;
-            this->current_procedure = proc;
-            defer
+            if (proc->is_external == false)
             {
-                this->current_procedure = old_procedure;
-            };
+                auto old_procedure      = this->current_procedure;
+                this->current_procedure = proc;
+                defer
+                {
+                    this->current_procedure = old_procedure;
+                };
 
-            if (typecheck(proc->body) == false)
-            {
-                return false;
+                if (typecheck(proc->body) == false)
+                {
+                    return false;
+                }
             }
 
             proc->type = proc->signature;
@@ -1020,7 +1030,7 @@ const SimpleTypeNode BuiltinTypes::f64     = SimpleTypeNode{SimpleTypeNode::Kind
 const SimpleTypeNode BuiltinTypes::boolean = SimpleTypeNode{SimpleTypeNode::Kind::boolean, 1};
 const SimpleTypeNode BuiltinTypes::type    = SimpleTypeNode{SimpleTypeNode::Kind::type, -1};
 
-const ProcedureSignatureNode BuiltinTypes::main_type = []
+const ProcedureSignatureNode BuiltinTypes::main_signature = []
 {
     ProcedureSignatureNode result;
     result.return_type = const_cast<SimpleTypeNode *>(&BuiltinTypes::voyd);

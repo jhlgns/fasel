@@ -56,13 +56,19 @@ int main(int argc, char **argv)
     }
 
     // 2. Typechecking
-    auto program_node = make_node(nullptr, &program);
+    auto program_node = node_cast<ProgramNode>(make_node(nullptr, &program));
 
     TypeChecker type_checker{.print_errors = true};
     if (type_checker.typecheck(program_node) == false)
     {
         std::cout << "Typechecking failed" << std::endl;
         return 1;
+    }
+
+    for (auto [name, symbol] : program_node->block->symbols)
+    {
+        std::cout << "XXX Found global symbol: " << name << " (" << type_to_string(symbol.declaration->init_expression->type) << ")"
+                  << std::endl;
     }
 
     // 3. Compile to IR

@@ -62,13 +62,13 @@ struct IrCompiler
 
             if (auto decl = node_cast<DeclarationNode>(statement))
             {
-                auto it = block->locals.find(std::string{decl->identifier});
-                assert(it != block->locals.end());
+                auto it = block->symbols.find(std::string{decl->identifier});
+                assert(it != block->symbols.end());
 
                 // NOTE: This does not handle scope overlapping (phi allocations)
 
-                auto type           = this->convert_type(decl->init_expression->type);
-                it->second.location = this->ir.CreateAlloca(type, nullptr, decl->identifier);
+                auto type        = this->convert_type(decl->init_expression->type);
+                it->second.value = this->ir.CreateAlloca(type, nullptr, decl->identifier);
             }
         }
     }
@@ -293,11 +293,17 @@ struct IrCompiler
                             ++i;
                         }
 
-                        auto block =
-                            BasicBlock::Create(this->llvm_context, std::format("{}_entry", decl->identifier), function);
-                        this->ir.SetInsertPoint(block);  // TODO: Restore insert point when done?
-                        this->generate_code(decl->init_expression);
-                        // this->function->print(outs());
+                        if (procedure->is_external == false)
+                        {
+                            auto block = BasicBlock::Create(this->llvm_context, "entry", function);
+                            this->ir.SetInsertPoint(block);  // TODO: Restore insert point when done?
+                            this->generate_code(decl->init_expression);
+                        }
+
+                        auto it = decl->containing_block->symbols.find(std::string{decl->identifier});
+                        assert(it != decl->containing_block->symbols.end());
+                        it->second.value = this->function;
+
                         this->function = nullptr;
 
                         break;
@@ -315,7 +321,7 @@ struct IrCompiler
                             auto local = decl->containing_block->find_local(decl->identifier);
                             assert(local != std::nullopt);
 
-                            this->ir.CreateStore(value, local->location);
+                            this->ir.CreateStore(value, local->value);
                         }
 
                         // TODO
@@ -333,14 +339,14 @@ struct IrCompiler
                 auto type  = this->convert_type(node->type);
                 auto local = ident->containing_block->find_local(ident->identifier).value();
 
-                assert(local.location != nullptr);
+                assert(local.value != nullptr);
 
                 if (is_store)
                 {
-                    return local.location;
+                    return local.value;
                 }
 
-                return this->ir.CreateLoad(type, local.location);
+                return this->ir.CreateLoad(type, local.value);
             }
 
             case NodeKind::if_statement:
@@ -396,17 +402,37 @@ struct IrCompiler
 
             case NodeKind::procedure:
             {
-                auto procedure = static_cast<ProcedureNode *>(node);
+                auto proc = static_cast<ProcedureNode *>(node);
 
-                this->allocate_locals(procedure->body);
-                this->generate_code(procedure->body);
+                assert(proc->is_external == false);
+                this->allocate_locals(proc->body);
+                this->generate_code(proc->body);
 
                 return nullptr;
             }
 
             case NodeKind::procedure_call:
             {
-                UNREACHED;
+                auto call = static_cast<ProcedureCallNode *>(node);
+
+                assert(call->procedure->kind == NodeKind::identifier);  // TODO: Function pointer calling
+                auto ident = static_cast<IdentifierNode *>(call->procedure);
+                auto proc_var =
+                    call->containing_block->find_local(ident->identifier).value();  // TODO: Rename find_local
+                assert(proc_var.value != nullptr);
+                assert(proc_var.declaration->init_expression->kind == NodeKind::procedure);
+                auto proc = static_cast<ProcedureNode *>(proc_var.declaration->init_expression);
+
+                auto type = cast<FunctionType>(this->convert_type(proc->signature));
+
+                std::vector<Value *> arguments{};
+                for (auto argument : call->arguments)
+                {
+                    auto argument_value = this->generate_code(argument);
+                    arguments.push_back(argument_value);
+                }
+
+                return this->ir.CreateCall(type, proc_var.value, arguments);
             }
 
             case NodeKind::procedure_signature:

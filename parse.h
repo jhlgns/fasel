@@ -135,7 +135,7 @@ struct AstLiteral : AstOfKind<AstKind::literal>
 struct AstProcedureSignature : AstOfKind<AstKind::procedure_signature>
 {
     std::vector<AstDeclaration> arguments{};
-    AstNode *return_type;
+    AstNode *return_type{};
 };
 
 struct AstBlock : AstOfKind<AstKind::block>
@@ -164,7 +164,8 @@ struct AstIdentifier : AstOfKind<AstKind::identifier>
 struct AstProcedure : AstOfKind<AstKind::procedure>
 {
     AstProcedureSignature signature{};
-    AstBlock body{};
+    AstBlock body{};  // TODO: Make this an optional pointer!
+    bool is_external{};
 };
 
 struct AstProcedureCall : AstOfKind<AstKind::procedure_call>

@@ -80,6 +80,9 @@ struct Jit::Impl
             std::make_unique<ConcurrentIRCompiler>(std::move(*jit_target_machine_builder)));
 
         this->main_jit_dy_lib = &this->execution_session->createBareJITDylib("<main>");
+
+        this->main_jit_dy_lib->addGenerator(
+            cantFail(DynamicLibrarySearchGenerator::GetForCurrentProcess(this->data_layout.value().getGlobalPrefix())));
     }
 };
 
