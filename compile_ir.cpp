@@ -34,7 +34,7 @@ struct IrCompiler
 
     LLVMContext &llvm_context;
     std::unique_ptr<Module> module;
-    Function *function{};
+    Function *current_function{};
     IRBuilder<llvm::NoFolder> ir;
     // IRBuilder<> ir;
 
@@ -74,20 +74,20 @@ struct IrCompiler
 
         switch (node->kind)
         {
-            case NodeKind::simple_type:
+            case NodeKind::basic_type:
             {
-                auto simple = static_cast<const SimpleTypeNode *>(node);
+                auto basic = static_cast<const BasicTypeNode *>(node);
 
-                switch (simple->type_kind)
+                switch (basic->type_kind)
                 {
-                    case SimpleTypeNode::Kind::voyd:             return this->ir.getVoidTy();
-                    case SimpleTypeNode::Kind::boolean:          return this->ir.getInt1Ty();
-                    case SimpleTypeNode::Kind::signed_integer:   return this->ir.getIntNTy(simple->size * 8);
-                    case SimpleTypeNode::Kind::unsigned_integer: return this->ir.getIntNTy(simple->size * 8);
+                    case BasicTypeNode::Kind::voyd:             return this->ir.getVoidTy();
+                    case BasicTypeNode::Kind::boolean:          return this->ir.getInt1Ty();
+                    case BasicTypeNode::Kind::signed_integer:   return this->ir.getIntNTy(basic->size * 8);
+                    case BasicTypeNode::Kind::unsigned_integer: return this->ir.getIntNTy(basic->size * 8);
 
-                    case SimpleTypeNode::Kind::floatingpoint:
+                    case BasicTypeNode::Kind::floatingpoint:
                     {
-                        switch (simple->size)
+                        switch (basic->size)
                         {
                             case 4:  return this->ir.getFloatTy();
                             case 8:  return this->ir.getDoubleTy();
@@ -155,47 +155,48 @@ struct IrCompiler
         }
     }
 
-    Value *generate_binary_operator_code(BinaryOperatorNode *bin_op)
+    Value *generate_code(BinaryOperatorNode *bin_op)
     {
-        auto is_store = bin_op->operator_type == Tt::assign;
-        auto lhs      = this->generate_code(bin_op->lhs, is_store);
-        if (lhs == nullptr)
-        {
-            UNREACHED;
-        }
+        assert(types_equal(bin_op->lhs->type, bin_op->rhs->type));
+
+        auto is_store = bin_op->operator_kind == Tt::assign;
+
+        auto lhs = this->generate_code(bin_op->lhs, is_store);
+        CHECK(lhs != nullptr);
 
         auto rhs = this->generate_code(bin_op->rhs);
-        if (rhs == nullptr)
+        CHECK(rhs != nullptr);
+
+        if (bin_op->operator_kind == Tt::assign)
         {
-            UNREACHED;
+            return this->ir.CreateStore(rhs, lhs);
         }
 
-        assert(bin_op->type->kind == NodeKind::simple_type);
-        auto type = node_cast<SimpleTypeNode, true>(bin_op->type);
+        assert(bin_op->type->kind == NodeKind::basic_type);
+        auto type = node_cast<BasicTypeNode, true>(bin_op->type);
 
         switch (type->type_kind)
         {
-            case SimpleTypeNode::Kind::signed_integer:
+            case BasicTypeNode::Kind::signed_integer:
             {
-                switch (bin_op->operator_type)
+                switch (bin_op->operator_kind)
                 {
-                    case Tt::asterisk:              return this->ir.CreateMul(lhs, rhs); break;
-                    case Tt::slash:                 return this->ir.CreateSDiv(lhs, rhs); break;
-                    case Tt::mod:                   return this->ir.CreateSRem(lhs, rhs); break;
-                    case Tt::plus:                  return this->ir.CreateAdd(lhs, rhs); break;
-                    case Tt::minus:                 return this->ir.CreateSub(lhs, rhs); break;
-                    case Tt::assign:                return this->ir.CreateStore(rhs, lhs); break;  // TODO: Pointer to left hand side?
-                    case Tt::bit_and:               return this->ir.CreateAnd(lhs, rhs); break;
-                    case Tt::bit_or:                return this->ir.CreateOr(lhs, rhs); break;
-                    case Tt::bit_xor:               return this->ir.CreateXor(lhs, rhs); break;
-                    case Tt::left_shift:            return this->ir.CreateShl(lhs, rhs); break;
-                    case Tt::right_shift:           return this->ir.CreateLShr(lhs, rhs); break;  // TODO: LShr or AShr?
-                    case Tt::equal:                 return this->ir.CreateICmp(CmpInst::ICMP_EQ, lhs, rhs); break;
-                    case Tt::inequal:               return this->ir.CreateICmp(CmpInst::ICMP_NE, lhs, rhs); break;
-                    case Tt::greater_than_or_equal: return this->ir.CreateICmp(CmpInst::ICMP_SGE, lhs, rhs); break;
-                    case Tt::greater_than:          return this->ir.CreateICmp(CmpInst::ICMP_SGT, lhs, rhs); break;
-                    case Tt::less_than_or_equal:    return this->ir.CreateICmp(CmpInst::ICMP_SLE, lhs, rhs); break;
-                    case Tt::less_than:             return this->ir.CreateICmp(CmpInst::ICMP_SLT, lhs, rhs); break;
+                    case Tt::asterisk:              return this->ir.CreateMul(lhs, rhs, "mul");
+                    case Tt::slash:                 return this->ir.CreateSDiv(lhs, rhs, "div");
+                    case Tt::mod:                   return this->ir.CreateSRem(lhs, rhs, "mod");
+                    case Tt::plus:                  return this->ir.CreateAdd(lhs, rhs, "add");
+                    case Tt::minus:                 return this->ir.CreateSub(lhs, rhs, "sub");
+                    case Tt::bit_and:               return this->ir.CreateAnd(lhs, rhs, "and");
+                    case Tt::bit_or:                return this->ir.CreateOr(lhs, rhs, "or");
+                    case Tt::bit_xor:               return this->ir.CreateXor(lhs, rhs, "xor");
+                    case Tt::left_shift:            return this->ir.CreateShl(lhs, rhs, "shl");
+                    case Tt::right_shift:           return this->ir.CreateLShr(lhs, rhs, "lshr");
+                    case Tt::equal:                 return this->ir.CreateICmp(CmpInst::ICMP_EQ, lhs, rhs, "ieq");
+                    case Tt::inequal:               return this->ir.CreateICmp(CmpInst::ICMP_NE, lhs, rhs, "ine");
+                    case Tt::greater_than_or_equal: return this->ir.CreateICmp(CmpInst::ICMP_SGE, lhs, rhs, "isge");
+                    case Tt::greater_than:          return this->ir.CreateICmp(CmpInst::ICMP_SGT, lhs, rhs, "isgt");
+                    case Tt::less_than_or_equal:    return this->ir.CreateICmp(CmpInst::ICMP_SLE, lhs, rhs, "isle");
+                    case Tt::less_than:             return this->ir.CreateICmp(CmpInst::ICMP_SLT, lhs, rhs, "islt");
                     case Tt::logical_and:           TODO;
                     case Tt::logical_or:            TODO;
 
@@ -205,29 +206,52 @@ struct IrCompiler
                 break;
             }
 
-            case SimpleTypeNode::Kind::unsigned_integer:
+            case BasicTypeNode::Kind::unsigned_integer:
             {
-                TODO;
+                switch (bin_op->operator_kind)
+                {
+                    case Tt::asterisk:              return this->ir.CreateMul(lhs, rhs, "mul");
+                    case Tt::slash:                 return this->ir.CreateUDiv(lhs, rhs, "udiv");
+                    case Tt::mod:                   return this->ir.CreateURem(lhs, rhs, "urem");
+                    case Tt::plus:                  return this->ir.CreateAdd(lhs, rhs, "add");
+                    case Tt::minus:                 return this->ir.CreateSub(lhs, rhs, "sub");
+                    case Tt::bit_and:               return this->ir.CreateAnd(lhs, rhs, "and");
+                    case Tt::bit_or:                return this->ir.CreateOr(lhs, rhs, "or");
+                    case Tt::bit_xor:               return this->ir.CreateXor(lhs, rhs, "xor");
+                    case Tt::left_shift:            return this->ir.CreateShl(lhs, rhs, "shl");
+                    case Tt::right_shift:           return this->ir.CreateLShr(lhs, rhs, "lshr");
+                    case Tt::equal:                 return this->ir.CreateICmp(CmpInst::ICMP_EQ, lhs, rhs, "ieq");
+                    case Tt::inequal:               return this->ir.CreateICmp(CmpInst::ICMP_NE, lhs, rhs, "ine");
+                    case Tt::greater_than_or_equal: return this->ir.CreateICmp(CmpInst::ICMP_UGE, lhs, rhs, "iuge");
+                    case Tt::greater_than:          return this->ir.CreateICmp(CmpInst::ICMP_UGT, lhs, rhs, "iugt");
+                    case Tt::less_than_or_equal:    return this->ir.CreateICmp(CmpInst::ICMP_ULE, lhs, rhs, "iule");
+                    case Tt::less_than:             return this->ir.CreateICmp(CmpInst::ICMP_ULT, lhs, rhs, "iult");
+                    case Tt::logical_and:           TODO;
+                    case Tt::logical_or:            TODO;
+
+                    default: UNREACHED;
+                }
+
+                break;
             }
 
-            case SimpleTypeNode::Kind::floatingpoint:
+            case BasicTypeNode::Kind::floatingpoint:
             {
-                switch (bin_op->operator_type)
+                switch (bin_op->operator_kind)
                 {
-                    case Tt::asterisk: return this->ir.CreateFMul(lhs, rhs); break;
-                    case Tt::slash:    return this->ir.CreateFDiv(lhs, rhs); break;
-                    case Tt::mod:      return this->ir.CreateFRem(lhs, rhs); break;
-                    case Tt::plus:     return this->ir.CreateFAdd(lhs, rhs); break;
-                    case Tt::minus:    return this->ir.CreateFSub(lhs, rhs); break;
-                    case Tt::assign:   return this->ir.CreateStore(rhs, lhs);
+                    case Tt::asterisk: return this->ir.CreateFMul(lhs, rhs, "fmul");
+                    case Tt::slash:    return this->ir.CreateFDiv(lhs, rhs, "fdiv");
+                    case Tt::mod:      return this->ir.CreateFRem(lhs, rhs, "frem");
+                    case Tt::plus:     return this->ir.CreateFAdd(lhs, rhs, "fadd");
+                    case Tt::minus:    return this->ir.CreateFSub(lhs, rhs, "fsub");
 
                     // TODO: Read more about ordered and unordered floating point comparisons
-                    case Tt::equal:                 return this->ir.CreateFCmp(CmpInst::FCMP_OEQ, lhs, rhs); break;
-                    case Tt::inequal:               return this->ir.CreateFCmp(CmpInst::FCMP_ONE, lhs, rhs); break;
-                    case Tt::greater_than_or_equal: return this->ir.CreateFCmp(CmpInst::FCMP_OGE, lhs, rhs); break;
-                    case Tt::greater_than:          return this->ir.CreateFCmp(CmpInst::FCMP_OGT, lhs, rhs); break;
-                    case Tt::less_than_or_equal:    return this->ir.CreateFCmp(CmpInst::FCMP_OLE, lhs, rhs); break;
-                    case Tt::less_than:             return this->ir.CreateFCmp(CmpInst::FCMP_OLT, lhs, rhs); break;
+                    case Tt::equal:                 return this->ir.CreateFCmp(CmpInst::FCMP_OEQ, lhs, rhs, "foeq");
+                    case Tt::inequal:               return this->ir.CreateFCmp(CmpInst::FCMP_ONE, lhs, rhs, "fone");
+                    case Tt::greater_than_or_equal: return this->ir.CreateFCmp(CmpInst::FCMP_OGE, lhs, rhs, "foge");
+                    case Tt::greater_than:          return this->ir.CreateFCmp(CmpInst::FCMP_OGT, lhs, rhs, "fogt");
+                    case Tt::less_than_or_equal:    return this->ir.CreateFCmp(CmpInst::FCMP_OLE, lhs, rhs, "fole");
+                    case Tt::less_than:             return this->ir.CreateFCmp(CmpInst::FCMP_OLT, lhs, rhs, "folt");
                     default:                        UNREACHED;
                 }
             }
@@ -238,310 +262,288 @@ struct IrCompiler
         UNREACHED;
     }
 
-    Value *generate_code(Node *node, bool is_store = false)
+    Value *generate_code(BlockNode *block)
     {
-        switch (node->kind)
+        for (auto statement : block->statements)
         {
-            case NodeKind::binary_operator:
+            this->generate_code(statement);
+        }
+
+        return nullptr;
+    }
+
+    Value *generate_code(DeclarationNode *decl)
+    {
+        if (decl->init_expression->kind == NodeKind::procedure)
+        {
+            // TODO: Transform local procedure declarations to global ones
+            assert(decl->containing_block->is_global());
+            assert(this->current_function == nullptr);
+
+            auto procedure = node_cast<ProcedureNode, true>(decl->init_expression);
+
+            auto type              = this->convert_type(decl->init_expression->type);
+            auto function_type     = cast<FunctionType>(type);
+            this->current_function = Function::Create(
+                function_type,
+                GlobalValue::LinkageTypes::ExternalLinkage,
+                decl->identifier,
+                this->module.get());
+
+            auto i = 0;
+            for (auto &arg : this->current_function->args())
             {
-                auto bin_op = static_cast<BinaryOperatorNode *>(node);
-                return generate_binary_operator_code(bin_op);
+                arg.setName(procedure->signature->arguments[i]->identifier);
+                ++i;
             }
 
-            case NodeKind::block:
+            if (procedure->is_external == false)
             {
-                auto block = static_cast<BlockNode *>(node);
+                auto block = BasicBlock::Create(this->llvm_context, "entry", this->current_function);
+                this->ir.SetInsertPoint(block);  // TODO: Restore insert point when done?
+                this->generate_code(decl->init_expression);
+            }
 
-                for (auto statement : block->statements)
+            decl->named_value = this->current_function;
+
+            this->current_function = nullptr;
+
+            return nullptr;
+        }
+
+         // TODO: There are no global variables yet and they are not on the roadmap
+        CHECK(decl->containing_block->is_global() == false);
+
+        // Declaration assignment to init expresion
+        auto value = this->generate_code(decl->init_expression);
+        this->ir.CreateStore(value, decl->named_value);
+
+        return nullptr;
+    }
+
+    Value *generate_code(IdentifierNode *ident, bool is_store = false)
+    {
+        auto type = this->convert_type(ident->type);
+        auto decl = ident->containing_block->find_declaration(ident->identifier);
+
+        assert(decl->named_value != nullptr);
+
+        if (is_store)
+        {
+            return decl->named_value;
+        }
+
+        return this->ir.CreateLoad(type, decl->named_value, "load");
+    }
+
+    Value *generate_code(IfNode *yf) { TODO; }
+
+    Value *generate_code(LiteralNode *literal)
+    {
+        auto basic_type = node_cast<BasicTypeNode, true>(literal->type);
+        assert(basic_type != nullptr);  // TODO: Struct types will appear here
+
+        switch (basic_type->type_kind)
+        {
+            case BasicTypeNode::Kind::boolean:
+            {
+                auto value = std::get<bool>(literal->value);
+                return ConstantInt::get(this->ir.getInt1Ty(), value);
+            }
+
+            case BasicTypeNode::Kind::signed_integer:
+            case BasicTypeNode::Kind::unsigned_integer:
+            {
+                auto value = std::get<uint64_t>(literal->value);
+                return ConstantInt::get(IntegerType::get(this->llvm_context, basic_type->size * 8), value);
+            }
+
+            case BasicTypeNode::Kind::floatingpoint:
+            {
+                switch (basic_type->size)
                 {
-                    this->generate_code(statement);
-                }
+                    case 4:
+                    {
+                        auto value = std::get<float>(literal->value);
+                        return ConstantFP::get(this->llvm_context, APFloat{value});
+                    }
 
+                    case 8:
+                    {
+                        auto value = std::get<double>(literal->value);
+                        return ConstantFP::get(this->ir.getDoubleTy(), value);
+                    }
+
+                    default: UNREACHED;
+                }
+            }
+
+            default: TODO;
+        }
+    }
+
+    Value *generate_code(ProcedureNode *proc)
+    {
+        assert(proc->is_external == false);
+        this->allocate_locals(proc->body);
+        this->generate_code(proc->body);
+
+        return nullptr;
+    }
+
+    Value *generate_code(ProcedureCallNode *call)
+    {
+        assert(call->procedure->kind == NodeKind::identifier);  // TODO: Function pointer calling
+        auto ident     = static_cast<IdentifierNode *>(call->procedure);
+        auto proc_decl = call->containing_block->find_declaration(ident->identifier);
+        assert(
+            proc_decl->named_value !=
+            nullptr);  // TODO: Implement on-demand node compilation with something like ensure_compiled(Node *node)
+        assert(proc_decl->init_expression->kind == NodeKind::procedure);
+        auto proc = static_cast<ProcedureNode *>(proc_decl->init_expression);
+
+        auto type = cast<FunctionType>(this->convert_type(proc->signature));
+
+        std::vector<Value *> arguments{};
+        for (auto argument : call->arguments)
+        {
+            auto argument_value = this->generate_code(argument);
+            arguments.push_back(argument_value);
+        }
+
+        if (proc->signature->return_type->kind == NodeKind::basic_type)
+        {
+            auto return_basic = node_cast<BasicTypeNode>(proc->signature->return_type);
+            if (return_basic->type_kind == BasicTypeNode::Kind::voyd)
+            {
+                this->ir.CreateCall(type, proc_decl->named_value, arguments);
                 return nullptr;
             }
+        }
 
-            case NodeKind::declaration:
+        return this->ir.CreateCall(type, proc_decl->named_value, arguments, std::format("call_{}", ident->identifier));
+    }
+
+    Value *generate_code(ReturnNode *retyrn)
+    {
+        if (retyrn->expression->kind == NodeKind::nop)
+        {
+            return this->ir.CreateRet(nullptr);
+        }
+
+        auto value = this->generate_code(retyrn->expression);
+        this->ir.CreateRet(value);
+
+        return nullptr;
+    }
+
+    Value *generate_code(TypeCastNode *cast)
+    {
+        auto dest_basic_type = node_cast<BasicTypeNode, true>(cast->type);
+        auto src_basic_type  = node_cast<BasicTypeNode, true>(cast->expression->type);
+
+        assert(dest_basic_type->type_kind == BasicTypeNode::Kind::floatingpoint);
+
+        auto expression_value = this->generate_code(cast->expression);
+        auto dest_type        = this->convert_type(dest_basic_type);
+
+        assert(dest_type->isFloatingPointTy());
+
+        switch (src_basic_type->type_kind)
+        {
+            case BasicTypeNode::Kind::boolean: UNREACHED;
+
+            case BasicTypeNode::Kind::signed_integer:
             {
-                auto decl = static_cast<DeclarationNode *>(node);
-
-                switch (decl->init_expression->kind)
+                switch (dest_basic_type->type_kind)
                 {
-                    case NodeKind::procedure:
+                    case BasicTypeNode::Kind::floatingpoint:
                     {
-                        // TODO: Transform local procedure declarations to global ones
-                        assert(decl->containing_block->is_global());
-                        assert(this->function == nullptr);
-
-                        auto procedure = node_cast<ProcedureNode, true>(decl->init_expression);
-
-                        auto type          = this->convert_type(decl->init_expression->type);
-                        auto function_type = cast<FunctionType>(type);
-                        this->function     = Function::Create(
-                            function_type,
-                            GlobalValue::LinkageTypes::ExternalLinkage,
-                            decl->identifier,
-                            this->module.get());
-
-                        auto i = 0;
-                        for (auto &arg : this->function->args())
-                        {
-                            arg.setName(procedure->signature->arguments[i]->identifier);
-                            ++i;
-                        }
-
-                        if (procedure->is_external == false)
-                        {
-                            auto block = BasicBlock::Create(this->llvm_context, "entry", function);
-                            this->ir.SetInsertPoint(block);  // TODO: Restore insert point when done?
-                            this->generate_code(decl->init_expression);
-                        }
-
-                        decl->named_value = this->function;
-
-                        this->function = nullptr;
-
-                        break;
+                        return this->ir.CreateSIToFP(expression_value, dest_type, "itof");
                     }
 
-                    default:
-                    {
-                        if (decl->containing_block->is_global())
-                        {
-                            TODO;  // TODO: There are no global variables yet and they are not on the roadmap
-                        }
-                        else
-                        {
-                            // Declaration assignment to init expresion
-
-                            auto value = this->generate_code(decl->init_expression);
-                            this->ir.CreateStore(value, decl->named_value);
-                        }
-
-                        // TODO
-                        break;
-                    }
+                    default: TODO;
                 }
-
-                return nullptr;
             }
 
-            case NodeKind::identifier:
+            case BasicTypeNode::Kind::unsigned_integer:
             {
-                auto ident = static_cast<IdentifierNode *>(node);
-
-                auto type = this->convert_type(node->type);
-                auto decl = ident->containing_block->find_declaration(ident->identifier);
-
-                assert(decl->named_value != nullptr);
-
-                if (is_store)
+                switch (dest_basic_type->type_kind)
                 {
-                    return decl->named_value;
+                    case BasicTypeNode::Kind::floatingpoint:
+                    {
+                        return this->ir.CreateUIToFP(expression_value, dest_type, "utof");
+                    }
+
+                    default: TODO;
                 }
-
-                return this->ir.CreateLoad(type, decl->named_value);
             }
 
-            case NodeKind::if_statement:
+            case BasicTypeNode::Kind::floatingpoint:
             {
-                TODO;
-            }
-
-            case NodeKind::literal:
-            {
-                auto literal = static_cast<LiteralNode *>(node);
-
-                auto simple_type = node_cast<SimpleTypeNode, true>(literal->type);
-                assert(simple_type != nullptr);
-
-                switch (simple_type->type_kind)
+                switch (dest_basic_type->type_kind)
                 {
-                    case SimpleTypeNode::Kind::boolean:
+                    case BasicTypeNode::Kind::floatingpoint:
                     {
-                        auto value = std::get<bool>(literal->value);
-                        return ConstantInt::get(this->ir.getInt1Ty(), value);
-                    }
-
-                    case SimpleTypeNode::Kind::signed_integer:
-                    case SimpleTypeNode::Kind::unsigned_integer:
-                    {
-                        auto value = std::get<uint64_t>(literal->value);
-                        return ConstantInt::get(IntegerType::get(this->llvm_context, simple_type->size * 8), value);
-                    }
-
-                    case SimpleTypeNode::Kind::floatingpoint:
-                    {
-                        switch (simple_type->size)
+                        switch (src_basic_type->size)
                         {
                             case 4:
                             {
-                                auto value = std::get<float>(literal->value);
-                                return ConstantFP::get(this->llvm_context, APFloat{value});
+                                assert(dest_basic_type->size == 8);
+                                return this->ir.CreateFPExt(expression_value, dest_type, "ftod");
                             }
 
                             case 8:
                             {
-                                auto value = std::get<double>(literal->value);
-                                return ConstantFP::get(this->ir.getDoubleTy(), value);
+                                assert(dest_basic_type->size == 4);
+                                return this->ir.CreateFPTrunc(expression_value, dest_type, "dtof");
                             }
 
                             default: UNREACHED;
                         }
                     }
 
-                    default: UNREACHED;
+                    default: TODO;
                 }
             }
 
-            case NodeKind::procedure:
-            {
-                auto proc = static_cast<ProcedureNode *>(node);
+            default: UNREACHED;
+        }
+    }
 
-                assert(proc->is_external == false);
-                this->allocate_locals(proc->body);
-                this->generate_code(proc->body);
+    Value *generate_code(ModuleNode *module)
+    {
+        for (auto decl : module->block->statements)
+        {
+            assert(decl->kind == NodeKind::declaration);
+            this->generate_code(decl);
+        }
 
-                return nullptr;
-            }
+        return nullptr;
+    }
 
-            case NodeKind::procedure_call:
-            {
-                auto call = static_cast<ProcedureCallNode *>(node);
+    Value *generate_code(Node *node, bool is_store = false)
+    {
+        switch (node->kind)
+        {
+            case NodeKind::binary_operator:  return this->generate_code(static_cast<BinaryOperatorNode *>(node));
+            case NodeKind::block:            return this->generate_code(static_cast<BlockNode *>(node));
+            case NodeKind::declaration:      return this->generate_code(static_cast<DeclarationNode *>(node));
+            case NodeKind::identifier:       return this->generate_code(static_cast<IdentifierNode *>(node), is_store);
+            case NodeKind::if_statement:     return this->generate_code(static_cast<IfNode *>(node));
+            case NodeKind::literal:          return this->generate_code(static_cast<LiteralNode *>(node));
+            case NodeKind::module:           return this->generate_code(static_cast<ModuleNode *>(node));
+            case NodeKind::procedure:        return this->generate_code(static_cast<ProcedureNode *>(node));
+            case NodeKind::procedure_call:   return this->generate_code(static_cast<ProcedureCallNode *>(node));
+            case NodeKind::return_statement: return this->generate_code(static_cast<ReturnNode *>(node));
+            case NodeKind::type_cast:        return this->generate_code(static_cast<TypeCastNode *>(node));
 
-                assert(call->procedure->kind == NodeKind::identifier);  // TODO: Function pointer calling
-                auto ident     = static_cast<IdentifierNode *>(call->procedure);
-                auto proc_decl = call->containing_block->find_declaration(ident->identifier);
-                assert(
-                    proc_decl->named_value !=
-                    nullptr);  // TODO: Implement on-demand node compilation with something like ensure_compiled(Node *node)
-                assert(proc_decl->init_expression->kind == NodeKind::procedure);
-                auto proc = static_cast<ProcedureNode *>(proc_decl->init_expression);
-
-                auto type = cast<FunctionType>(this->convert_type(proc->signature));
-
-                std::vector<Value *> arguments{};
-                for (auto argument : call->arguments)
-                {
-                    auto argument_value = this->generate_code(argument);
-                    arguments.push_back(argument_value);
-                }
-
-                return this->ir.CreateCall(type, proc_decl->named_value, arguments);
-            }
-
-            case NodeKind::procedure_signature:
-            {
-                UNREACHED;
-            }
-
-            case NodeKind::return_statement:
-            {
-                auto retyrn = static_cast<ReturnNode *>(node);
-
-                if (retyrn->expression->kind == NodeKind::nop)
-                {
-                    return this->ir.CreateRet(nullptr);
-                }
-
-                auto value = this->generate_code(retyrn->expression);
-                return this->ir.CreateRet(value);
-            }
-
-            case NodeKind::type_cast:
-            {
-                auto cast = static_cast<TypeCastNode *>(node);
-
-                auto dest_simple_type = node_cast<SimpleTypeNode, true>(cast->type);
-                auto src_simple_type  = node_cast<SimpleTypeNode, true>(cast->expression->type);
-
-                assert(dest_simple_type->type_kind == SimpleTypeNode::Kind::floatingpoint);
-
-                auto expression_value = this->generate_code(cast->expression);
-                auto dest_type        = this->convert_type(dest_simple_type);
-
-                assert(dest_type->isFloatingPointTy());
-
-                switch (src_simple_type->type_kind)
-                {
-                    case SimpleTypeNode::Kind::boolean: UNREACHED;
-
-                    case SimpleTypeNode::Kind::signed_integer:
-                    {
-                        switch (dest_simple_type->type_kind)
-                        {
-                            case SimpleTypeNode::Kind::floatingpoint:
-                            {
-                                return this->ir.CreateSIToFP(expression_value, dest_type, "itof");
-                            }
-
-                            default: TODO;
-                        }
-                    }
-
-                    case SimpleTypeNode::Kind::unsigned_integer:
-                    {
-                        switch (dest_simple_type->type_kind)
-                        {
-                            case SimpleTypeNode::Kind::floatingpoint:
-                            {
-                                return this->ir.CreateUIToFP(expression_value, dest_type, "utof");
-                            }
-
-                            default: TODO;
-                        }
-                    }
-
-                    case SimpleTypeNode::Kind::floatingpoint:
-                    {
-                        switch (dest_simple_type->type_kind)
-                        {
-                            case SimpleTypeNode::Kind::floatingpoint:
-                            {
-                                switch (src_simple_type->size)
-                                {
-                                    case 4:
-                                    {
-                                        assert(dest_simple_type->size == 8);
-                                        return this->ir.CreateFPExt(expression_value, dest_type, "ftod");
-                                    }
-
-                                    case 8:
-                                    {
-                                        assert(dest_simple_type->size == 4);
-                                        return this->ir.CreateFPTrunc(expression_value, dest_type, "dtof");
-                                    }
-
-                                    default: UNREACHED;
-                                }
-                            }
-
-                            default: TODO;
-                        }
-                    }
-
-                    default: UNREACHED;
-                }
-            }
-
-            case NodeKind::program:
-            {
-                auto program = static_cast<ProgramNode *>(node);
-                // generate_code(program->block);
-
-                for (auto declaration : program->block->statements)
-                {
-                    assert(declaration->kind == NodeKind::declaration);
-                    this->generate_code(declaration);
-                }
-
-                return nullptr;
-            }
-
-            case NodeKind::simple_type:  UNREACHED;
-            case NodeKind::pointer_type: UNREACHED;
-            case NodeKind::array_type:   UNREACHED;
-            case NodeKind::struct_type:  UNREACHED;
-            case NodeKind::nop:          UNREACHED;
+            case NodeKind::array_type:          UNREACHED;
+            case NodeKind::nop:                 UNREACHED;
+            case NodeKind::pointer_type:        UNREACHED;
+            case NodeKind::procedure_signature: UNREACHED;
+            case NodeKind::basic_type:          UNREACHED;
+            case NodeKind::struct_type:         UNREACHED;
         }
 
         UNREACHED;

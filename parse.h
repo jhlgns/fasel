@@ -1,58 +1,48 @@
 #pragma once
 
-#include "basics.h"
 #include "lex.h"
 #include <vector>
 
 enum class AstKind
 {
+    array_type,
     binary_operator,
     block,
     declaration,
     identifier,
     if_statement,
     literal,
+    module,
+    pointer_type,
     procedure,
     procedure_call,
     procedure_signature,
-    program,
     return_statement,
-    simple_type,
-    pointer_type,
-    array_type,
+    type_identifier,
 };
 
 inline const char *to_string(AstKind kind)
 {
     switch (kind)
     {
+        case AstKind::array_type:          return "array_type";
         case AstKind::binary_operator:     return "binary_operator";
         case AstKind::block:               return "block";
         case AstKind::declaration:         return "declaration";
         case AstKind::identifier:          return "identifier";
         case AstKind::if_statement:        return "if_statement";
         case AstKind::literal:             return "literal";
+        case AstKind::module:              return "module";
+        case AstKind::pointer_type:        return "pointer_type";
         case AstKind::procedure:           return "procedure";
         case AstKind::procedure_call:      return "procedure_call";
         case AstKind::procedure_signature: return "procedure_signature";
-        case AstKind::program:             return "program";
         case AstKind::return_statement:    return "return_statement";
-        case AstKind::simple_type:         return "simple_type";
-        case AstKind::pointer_type:        return "pointer_type";
-        case AstKind::array_type:          return "array_type";
+        case AstKind::type_identifier:     return "type_identifier";
     }
 
     assert(false);
 }
-
-// enum class LiteralType
-// {
-//     none,
-//     integer,
-//     float32,
-//     float64,
-//     string,
-// };
 
 struct AstNode
 {
@@ -95,7 +85,7 @@ TNode *ast_cast(AstNode *node)
     return static_cast<TNode *>(node);
 }
 
-struct AstSimpleType : AstOfKind<AstKind::simple_type>
+struct AstTypeIdentifier : AstOfKind<AstKind::type_identifier>
 {
     Token identifier{};
 };
@@ -105,7 +95,7 @@ struct AstPointerType : AstOfKind<AstKind::pointer_type>
     AstNode *target_type{};
 };
 
-struct AstArrayType : AstOfKind<AstKind::simple_type>
+struct AstArrayType : AstOfKind<AstKind::type_identifier>
 {
     AstNode *length_expression{};
     AstNode *element_type{};
@@ -129,7 +119,7 @@ struct AstLiteral : AstOfKind<AstKind::literal>
 {
     Token token{};
     char suffix{};  // 'u' or 'f'
-    std::variant<uint64_t, float, double, bool> value;
+    std::variant<uint64_t, float, double, bool> value{};
 };
 
 struct AstProcedureSignature : AstOfKind<AstKind::procedure_signature>
@@ -174,12 +164,15 @@ struct AstProcedureCall : AstOfKind<AstKind::procedure_call>
     std::vector<AstNode *> arguments{};
 };
 
-// TODO: Rename to module
-struct AstProgram : AstOfKind<AstKind::program>
+struct AstModule : AstOfKind<AstKind::module>
 {
     AstBlock block{};
 };
 
+bool parse_module(std::string_view source, AstModule &out_module);
+
+
+#if 0
 template<typename F>
 void visit(AstNode *node, const F &f)
 {
@@ -260,9 +253,9 @@ void visit(AstNode *node, const F &f)
         return;
     }
 
-    if (auto program = ast_cast<AstProgram>(node))
+    if (auto module = ast_cast<AstModule>(node))
     {
-        visit(&program->block, f);
+        visit(&module->block, f);
         return;
     }
 
@@ -274,5 +267,4 @@ void visit(AstNode *node, const F &f)
 
     UNREACHED;
 }
-
-bool parse_program(std::string_view source, AstProgram &out_program);
+#endif

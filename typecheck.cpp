@@ -97,7 +97,7 @@ Node *make_node_internal(BlockNode *containing_block, AstNode *ast)
             auto result           = new BinaryOperatorNode{};
             result->lhs           = lhs;
             result->rhs           = rhs;
-            result->operator_type = bin_op->type;
+            result->operator_kind = bin_op->type;
 
             return result;
         }
@@ -195,9 +195,7 @@ Node *make_node_internal(BlockNode *containing_block, AstNode *ast)
             if (proc->is_external == false)
             {
                 result->body = node_cast<BlockNode, true>(make_node(containing_block, &proc->body));
-                assert(result->body != nullptr);
             }
-
 
             return result;
         }
@@ -251,31 +249,31 @@ Node *make_node_internal(BlockNode *containing_block, AstNode *ast)
             return result;
         }
 
-        case AstKind::program:
+        case AstKind::module:
         {
-            auto program = static_cast<AstProgram *>(ast);
+            auto module = static_cast<AstModule *>(ast);
 
-            auto result   = new ProgramNode{};
-            result->block = node_cast<BlockNode, true>(make_node(nullptr, &program->block));
+            auto result   = new ModuleNode{};
+            result->block = node_cast<BlockNode, true>(make_node(nullptr, &module->block));
 
             return result;
         }
 
-        case AstKind::simple_type:
+        case AstKind::type_identifier:
         {
-            auto simple_type = static_cast<AstSimpleType *>(ast);
+            auto type_ident = static_cast<AstTypeIdentifier *>(ast);
 
             auto found = false;
             for (auto [type, name] : BuiltinTypes::type_names)
             {
-                if (simple_type->identifier.text() == name)
+                if (type_ident->identifier.text() == name)
                 {
                     return const_cast<Node *>(type);
                 }
             }
 
             // TODO: Error reporting
-            std::cout << "Type '" << simple_type->identifier.text()
+            std::cout << "Type '" << type_ident->identifier.text()
                       << "' not found (custom type names are not implemented yet)" << std::endl;
 
             return nullptr;
@@ -320,6 +318,8 @@ bool TypeChecker::typecheck(Node *node)
 {
     // NOTE: Only set the type if the node is an expression, do not assign void to statements
 
+    // TODO: Better error messages - print the inferred types if they are wrong so the user knows what is going on
+
     assert(node != nullptr);
     assert(node->type == nullptr);
 
@@ -339,36 +339,36 @@ bool TypeChecker::typecheck(Node *node)
                 return false;
             }
 
-            auto lhs_simple = node_cast<const SimpleTypeNode>(bin_op->lhs->type);
-            auto rhs_simple = node_cast<const SimpleTypeNode>(bin_op->rhs->type);
+            auto lhs_basic = node_cast<const BasicTypeNode>(bin_op->lhs->type);
+            auto rhs_basic = node_cast<const BasicTypeNode>(bin_op->rhs->type);
 
-            auto category = bin_op_category(bin_op->operator_type);
+            auto category = bin_op_category(bin_op->operator_kind);
             switch (category)
             {
                 case BinaryOperatorCategory::arithmetic:
                 {
-                    if (lhs_simple == nullptr)
+                    if (lhs_basic == nullptr)
                     {
                         this->error(bin_op, "Invalid kind of type for left operand");
                         return false;
                     }
 
-                    if (rhs_simple == nullptr)
+                    if (rhs_basic == nullptr)
                     {
                         this->error(bin_op, "Invalid kind of type for right operand");
                         return false;
                     }
 
-                    if (lhs_simple->is_numerical() == false || rhs_simple->is_numerical() == false)
+                    if (lhs_basic->is_numerical() == false || rhs_basic->is_numerical() == false)
                     {
                         this->error(bin_op, "Arithmetic binary operators require numerical expressions on both sides");
                         return false;
                     }
 
-                    auto invalid_integer_types = lhs_simple->type_kind == SimpleTypeNode::Kind::signed_integer &&
-                                                     rhs_simple->type_kind == SimpleTypeNode::Kind::unsigned_integer ||
-                                                 lhs_simple->type_kind == SimpleTypeNode::Kind::unsigned_integer &&
-                                                     rhs_simple->type_kind == SimpleTypeNode::Kind::signed_integer;
+                    auto invalid_integer_types = lhs_basic->type_kind == BasicTypeNode::Kind::signed_integer &&
+                                                     rhs_basic->type_kind == BasicTypeNode::Kind::unsigned_integer ||
+                                                 lhs_basic->type_kind == BasicTypeNode::Kind::unsigned_integer &&
+                                                     rhs_basic->type_kind == BasicTypeNode::Kind::signed_integer;
                     if (invalid_integer_types)
                     {
                         this->error(
@@ -377,21 +377,21 @@ bool TypeChecker::typecheck(Node *node)
                         return false;
                     }
 
-                    auto is_float = lhs_simple->type_kind == SimpleTypeNode::Kind::floatingpoint ||
-                                    rhs_simple->type_kind == SimpleTypeNode::Kind::floatingpoint;
-                    auto max_size = std::max(lhs_simple->size, rhs_simple->size);
+                    auto is_float = lhs_basic->type_kind == BasicTypeNode::Kind::floatingpoint ||
+                                    rhs_basic->type_kind == BasicTypeNode::Kind::floatingpoint;
+                    auto max_size = std::max(lhs_basic->size, rhs_basic->size);
 
                     assert(max_size == 1 || max_size == 2 || max_size == 4 || max_size == 8);
 
-                    auto type = new SimpleTypeNode{
-                        is_float ? SimpleTypeNode::Kind::floatingpoint : lhs_simple->type_kind,
+                    auto type = new BasicTypeNode{
+                        is_float ? BasicTypeNode::Kind::floatingpoint : lhs_basic->type_kind,
                         max_size};
 
                     bin_op->type = type;
 
                     if (is_float)
                     {
-                        if (types_equal(type, lhs_simple) == false)
+                        if (types_equal(type, lhs_basic) == false)
                         {
                             auto cast              = new TypeCastNode{};
                             cast->containing_block = bin_op->containing_block;
@@ -400,7 +400,7 @@ bool TypeChecker::typecheck(Node *node)
                             bin_op->lhs            = cast;
                         }
 
-                        if (types_equal(type, rhs_simple) == false)
+                        if (types_equal(type, rhs_basic) == false)
                         {
                             auto cast              = new TypeCastNode{};
                             cast->containing_block = bin_op->containing_block;
@@ -415,29 +415,29 @@ bool TypeChecker::typecheck(Node *node)
 
                 case BinaryOperatorCategory::bitwise_operation:
                 {
-                    if (lhs_simple == nullptr)
+                    if (lhs_basic == nullptr)
                     {
                         this->error(bin_op, "Invalid kind of type for left operand");
                         return false;
                     }
 
-                    if (rhs_simple == nullptr)
+                    if (rhs_basic == nullptr)
                     {
                         this->error(bin_op, "Invalid kind of type for right operand");
                         return false;
                     }
 
-                    if (lhs_simple->type_kind != SimpleTypeNode::Kind::unsigned_integer ||
-                        rhs_simple->type_kind != SimpleTypeNode::Kind::unsigned_integer)
+                    if (lhs_basic->type_kind != BasicTypeNode::Kind::unsigned_integer ||
+                        rhs_basic->type_kind != BasicTypeNode::Kind::unsigned_integer)
                     {
                         this->error(bin_op, "Bitwise binary operators require unsigned integer operands on both sides");
                         return false;
                     }
 
-                    auto max_size = std::max(lhs_simple->size, rhs_simple->size);
+                    auto max_size = std::max(lhs_basic->size, rhs_basic->size);
                     assert(max_size == 1 || max_size == 2 || max_size == 4 || max_size == 8);
 
-                    auto type = new SimpleTypeNode{SimpleTypeNode::Kind::unsigned_integer, max_size};
+                    auto type = new BasicTypeNode{BasicTypeNode::Kind::unsigned_integer, max_size};
 
                     bin_op->type = type;
 
@@ -461,25 +461,25 @@ bool TypeChecker::typecheck(Node *node)
 
                 case BinaryOperatorCategory::short_circuit_boolean:
                 {
-                    if (lhs_simple == nullptr)
+                    if (lhs_basic == nullptr)
                     {
                         this->error(bin_op, "Invalid type for left operand");
                         return false;
                     }
 
-                    if (rhs_simple == nullptr)
+                    if (rhs_basic == nullptr)
                     {
                         this->error(bin_op, "Invalid type for right operand");
                         return false;
                     }
 
-                    if (lhs_simple->type_kind != SimpleTypeNode::Kind::boolean)
+                    if (lhs_basic->type_kind != BasicTypeNode::Kind::boolean)
                     {
                         this->error(bin_op, "Left side is not a boolean expression");
                         return false;
                     }
 
-                    if (lhs_simple->type_kind != SimpleTypeNode::Kind::boolean)
+                    if (lhs_basic->type_kind != BasicTypeNode::Kind::boolean)
                     {
                         this->error(bin_op, "Right side is not a boolean expression");
                         return false;
@@ -494,7 +494,12 @@ bool TypeChecker::typecheck(Node *node)
                 {
                     if (types_equal(bin_op->lhs->type, bin_op->rhs->type) == false)
                     {
-                        this->error(bin_op, "An assignment expression must have the same type as the variable");
+                        this->error(
+                            bin_op,
+                            std::format(
+                                "Assignment type mismatch (left side {} vs. right side {})",
+                                type_to_string(bin_op->lhs->type),
+                                type_to_string(bin_op->rhs->type)));
                         return false;
                     }
 
@@ -519,7 +524,7 @@ bool TypeChecker::typecheck(Node *node)
             {
                 if (this->current_procedure != nullptr)
                 {
-                    // NOTE: While typechecking the program root block, current_procedure_body is nullptr
+                    // NOTE: While typechecking the module root block, current_procedure_body is nullptr
                     statement->time = ++this->current_procedure->body->current_time;
                 }
 
@@ -642,6 +647,7 @@ bool TypeChecker::typecheck(Node *node)
                 }
                 else
                 {
+                    assert(literal->suffix == '\0');
                     literal->type = &BuiltinTypes::i64;
                 }
 
@@ -650,18 +656,21 @@ bool TypeChecker::typecheck(Node *node)
 
             if (std::holds_alternative<float>(literal->value))
             {
+                assert(literal->suffix == 'f');
                 literal->type = &BuiltinTypes::f32;
                 return true;
             }
 
             if (std::holds_alternative<double>(literal->value))
             {
+                assert(literal->suffix == '\0');
                 literal->type = &BuiltinTypes::f64;
                 return true;
             }
 
             if (std::holds_alternative<bool>(literal->value))
             {
+                assert(literal->suffix == '\0');
                 literal->type = &BuiltinTypes::boolean;
                 return true;
             }
@@ -750,7 +759,7 @@ bool TypeChecker::typecheck(Node *node)
                     this->error(
                         node,
                         std::format(
-                            "Wrong type passed for argument '{}' (expected: {}, got: {})",
+                            "Wrong type passed for argument '{}' (expected: {}, received: {})",
                             signature->arguments[i]->identifier,
                             type_to_string(signature->arguments[i]->init_expression->type),
                             type_to_string(call->arguments[i]->type)));
@@ -799,20 +808,20 @@ bool TypeChecker::typecheck(Node *node)
                 this->error(
                     retyrn,
                     std::format(
-                        "The type of the return expression ({}) does not match the procedure return type ({})",
-                        type_to_string(retyrn->expression->type),
-                        type_to_string(this->current_procedure->signature->return_type)));
+                        "The type of the return expression does not match the procedure return type (expected {}, received {})",
+                        type_to_string(this->current_procedure->signature->return_type),
+                        type_to_string(retyrn->expression->type)));
                 return false;
             }
 
             return true;
         }
 
-        case NodeKind::program:
+        case NodeKind::module:
         {
-            auto program = static_cast<ProgramNode *>(node);
+            auto module = static_cast<ModuleNode *>(node);
 
-            if (typecheck(program->block) == false)
+            if (typecheck(module->block) == false)
             {
                 return false;
             }
@@ -820,7 +829,7 @@ bool TypeChecker::typecheck(Node *node)
             return true;
         }
 
-        case NodeKind::simple_type:
+        case NodeKind::basic_type:
         case NodeKind::pointer_type:
         case NodeKind::array_type:
         case NodeKind::struct_type:
@@ -837,7 +846,25 @@ bool TypeChecker::typecheck(Node *node)
             return true;
         }
 
-        case NodeKind::type_cast: UNREACHED;
+        case NodeKind::type_cast:
+        {
+            auto cast = static_cast<TypeCastNode *>(node);
+
+            assert(cast->type != nullptr);
+
+            // TODO: Pointer casting etc.
+
+            auto src_basic  = node_cast<BasicTypeNode, true>(cast->expression->type);
+            auto dest_basic = node_cast<BasicTypeNode, true>(cast->type);
+
+            if (src_basic->is_numerical() == false || dest_basic->is_numerical() == false)
+            {
+                this->error(cast, "Right now, only casts between numerical types are implemented");
+                return false;
+            }
+
+            // cast->type is already set
+        }
     }
 
     UNREACHED;
@@ -865,12 +892,12 @@ bool types_equal(const Node *lhs, const Node *rhs)
 
     switch (lhs->kind)
     {
-        case NodeKind::simple_type:
+        case NodeKind::basic_type:
         {
-            auto lhs_simple = static_cast<const SimpleTypeNode *>(lhs);
-            auto rhs_type   = static_cast<const SimpleTypeNode *>(rhs);
+            auto lhs_basic = static_cast<const BasicTypeNode *>(lhs);
+            auto rhs_basic = static_cast<const BasicTypeNode *>(rhs);
 
-            return lhs_simple->type_kind == rhs_type->type_kind && lhs_simple->size == rhs_type->size;
+            return lhs_basic->type_kind == rhs_basic->type_kind && lhs_basic->size == rhs_basic->size;
         }
 
         case NodeKind::pointer_type:
@@ -976,9 +1003,9 @@ std::string type_to_string(const Node *type)
             return result;
         }
 
-        case NodeKind::simple_type:
+        case NodeKind::basic_type:
         {
-            auto simple_type = static_cast<const SimpleTypeNode *>(type);
+            auto simple_type = static_cast<const BasicTypeNode *>(type);
 
             for (auto [builtin_type, name] : BuiltinTypes::type_names)
             {
@@ -1015,24 +1042,24 @@ std::string type_to_string(const Node *type)
     }
 }
 
-const SimpleTypeNode BuiltinTypes::voyd    = SimpleTypeNode{SimpleTypeNode::Kind::voyd, -1};
-const SimpleTypeNode BuiltinTypes::i64     = SimpleTypeNode{SimpleTypeNode::Kind::signed_integer, 8};
-const SimpleTypeNode BuiltinTypes::i32     = SimpleTypeNode{SimpleTypeNode::Kind::signed_integer, 4};
-const SimpleTypeNode BuiltinTypes::i16     = SimpleTypeNode{SimpleTypeNode::Kind::signed_integer, 2};
-const SimpleTypeNode BuiltinTypes::i8      = SimpleTypeNode{SimpleTypeNode::Kind::signed_integer, 1};
-const SimpleTypeNode BuiltinTypes::u64     = SimpleTypeNode{SimpleTypeNode::Kind::unsigned_integer, 8};
-const SimpleTypeNode BuiltinTypes::u32     = SimpleTypeNode{SimpleTypeNode::Kind::unsigned_integer, 4};
-const SimpleTypeNode BuiltinTypes::u16     = SimpleTypeNode{SimpleTypeNode::Kind::unsigned_integer, 2};
-const SimpleTypeNode BuiltinTypes::u8      = SimpleTypeNode{SimpleTypeNode::Kind::unsigned_integer, 1};
-const SimpleTypeNode BuiltinTypes::f32     = SimpleTypeNode{SimpleTypeNode::Kind::floatingpoint, 4};
-const SimpleTypeNode BuiltinTypes::f64     = SimpleTypeNode{SimpleTypeNode::Kind::floatingpoint, 8};
-const SimpleTypeNode BuiltinTypes::boolean = SimpleTypeNode{SimpleTypeNode::Kind::boolean, 1};
-const SimpleTypeNode BuiltinTypes::type    = SimpleTypeNode{SimpleTypeNode::Kind::type, -1};
+const BasicTypeNode BuiltinTypes::voyd    = BasicTypeNode{BasicTypeNode::Kind::voyd, -1};
+const BasicTypeNode BuiltinTypes::i64     = BasicTypeNode{BasicTypeNode::Kind::signed_integer, 8};
+const BasicTypeNode BuiltinTypes::i32     = BasicTypeNode{BasicTypeNode::Kind::signed_integer, 4};
+const BasicTypeNode BuiltinTypes::i16     = BasicTypeNode{BasicTypeNode::Kind::signed_integer, 2};
+const BasicTypeNode BuiltinTypes::i8      = BasicTypeNode{BasicTypeNode::Kind::signed_integer, 1};
+const BasicTypeNode BuiltinTypes::u64     = BasicTypeNode{BasicTypeNode::Kind::unsigned_integer, 8};
+const BasicTypeNode BuiltinTypes::u32     = BasicTypeNode{BasicTypeNode::Kind::unsigned_integer, 4};
+const BasicTypeNode BuiltinTypes::u16     = BasicTypeNode{BasicTypeNode::Kind::unsigned_integer, 2};
+const BasicTypeNode BuiltinTypes::u8      = BasicTypeNode{BasicTypeNode::Kind::unsigned_integer, 1};
+const BasicTypeNode BuiltinTypes::f32     = BasicTypeNode{BasicTypeNode::Kind::floatingpoint, 4};
+const BasicTypeNode BuiltinTypes::f64     = BasicTypeNode{BasicTypeNode::Kind::floatingpoint, 8};
+const BasicTypeNode BuiltinTypes::boolean = BasicTypeNode{BasicTypeNode::Kind::boolean, 1};
+const BasicTypeNode BuiltinTypes::type    = BasicTypeNode{BasicTypeNode::Kind::type, -1};
 
 const ProcedureSignatureNode BuiltinTypes::main_signature = []
 {
     ProcedureSignatureNode result;
-    result.return_type = const_cast<SimpleTypeNode *>(&BuiltinTypes::voyd);
+    result.return_type = const_cast<BasicTypeNode *>(&BuiltinTypes::voyd);
     return result;
 }();
 

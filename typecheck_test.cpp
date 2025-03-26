@@ -166,7 +166,7 @@ TEST_CASE("Identifiers - declared in parent block", "[typecheck]")
         auto decl              = new DeclarationNode{};
         decl->containing_block = &parent_block;
         decl->identifier       = "x";
-        decl->specified_type   = const_cast<SimpleTypeNode *>(&Types::u8);  // TODO
+        decl->specified_type   = const_cast<BasicTypeNode *>(&Types::u8);  // TODO
         decl->init_expression  = new NopNode{};
         parent_block.statements.push_back(decl);
 
@@ -198,7 +198,7 @@ TEST_CASE("Identifiers - declared in parent block", "[typecheck]")
         auto decl              = new DeclarationNode{};
         decl->containing_block = &parent_block;
         decl->identifier       = "x";
-        decl->specified_type   = const_cast<SimpleTypeNode *>(&Types::u8);  // TODO
+        decl->specified_type   = const_cast<BasicTypeNode *>(&Types::u8);  // TODO
         decl->init_expression  = new NopNode{};
         parent_block.statements.push_back(decl);
 
@@ -231,7 +231,7 @@ TEST_CASE("Identifiers - uninitialized, with explicit type", "[typecheck]")
         auto decl              = new DeclarationNode{};
         decl->containing_block = &block;
         decl->identifier       = "x";
-        decl->specified_type   = const_cast<SimpleTypeNode *>(&Types::u8);  // TODO
+        decl->specified_type   = const_cast<BasicTypeNode *>(&Types::u8);  // TODO
         decl->init_expression  = new NopNode{};
         block.statements.push_back(decl);
 
@@ -256,7 +256,7 @@ TEST_CASE("Identifiers - uninitialized, with explicit type", "[typecheck]")
         auto decl              = new DeclarationNode{};
         decl->containing_block = &block;
         decl->identifier       = "x";
-        decl->specified_type   = const_cast<SimpleTypeNode *>(&Types::u8);  // TODO
+        decl->specified_type   = const_cast<BasicTypeNode *>(&Types::u8);  // TODO
         decl->init_expression  = new NopNode{};
         block.statements.push_back(decl);
 
@@ -339,7 +339,7 @@ TEST_CASE("Declarations - initialized, with different explicit type", "[typechec
     auto decl              = new DeclarationNode{};
     decl->containing_block = &block;
     decl->identifier       = "x";
-    decl->specified_type   = const_cast<SimpleTypeNode *>(&Types::i8);  // TODO
+    decl->specified_type   = const_cast<BasicTypeNode *>(&Types::i8);  // TODO
     decl->init_expression  = &init_expression;
     block.statements.push_back(decl);
 
@@ -370,7 +370,7 @@ TEST_CASE("Procedures", "[typecheck]")
     expected_type->arguments.push_back(a);
     expected_type->arguments.push_back(b);
     expected_type->arguments.push_back(c);
-    expected_type->return_type = const_cast<SimpleTypeNode *>(&Types::voyd);
+    expected_type->return_type = const_cast<BasicTypeNode *>(&Types::voyd);
 
     test_type(proc, expected_type);
 }

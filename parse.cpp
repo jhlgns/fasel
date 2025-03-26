@@ -34,7 +34,7 @@ struct Parser
 
         auto current_token = start.peek_token();
 
-        auto line = get_line(start.lexer.source, current_token.pos.at);
+        auto line = extract_line(start.lexer.source, current_token.pos.at);
 
         auto message = std::format(
             "Parser error at {}:{}\n{}\n{}",
@@ -59,21 +59,21 @@ struct Parser
         return token;
     }
 
-    Parser parse_token(TokenType type, Token *token) const
+    Parser parse_token(TokenType type, Token *out_token) const
     {
         auto start = *this;
         auto p     = *this;
 
-        auto t = p.next_token();
-        if (t.type != type)
+        auto token = p.next_token();
+        if (token.type != type)
         {
-            this->error(start, std::format("Expected {}, got {} ({})", to_string(type), to_string(t.type), t.text()));
+            this->error(start, std::format("Expected {}, received {}", to_string(type), token.to_string()));
             return start;
         }
 
-        if (token != nullptr)
+        if (out_token != nullptr)
         {
-            *token = t;
+            *out_token = token;
         }
 
         return p;
@@ -86,21 +86,21 @@ struct Parser
         auto start = *this;
         auto p     = *this;
 
-        auto t = p.next_token();
-        if (t.type != Tt::keyword)
+        auto token = p.next_token();
+        if (token.type != Tt::keyword)
         {
-            this->error(start, std::format("Expected keyword '{}', got '{}'", keyword, to_string(t.type)));
+            this->error(start, std::format("Expected keyword {}, received {}", keyword, token.to_string()));
             return start;
         }
 
         auto len = keyword.size();
-        if (t.len < len)
+        if (token.len < len)
         {
-            len = t.len;
+            len = token.len;
         }
-        if (strncmp(t.pos.at, keyword.data(), len) != 0)
+        if (strncmp(token.pos.at, keyword.data(), len) != 0)
         {
-            p.error(start, std::format("Expected keyword '{}', got '{}'", keyword, to_string(t.type)));
+            p.error(start, std::format("Expected keyword {}, received {}", keyword, token.to_string()));
             return start;
         }
 
@@ -204,13 +204,6 @@ Parser parse_statement(Parser p, AstNode *&out_statement)
 Parser parse_block(Parser p, AstBlock &out_block)
 {
     auto start = p;
-
-    // out_block->parent_block = p.current_block;
-    // p.current_block         = out_block;
-    // defer
-    // {
-        // p.current_block = out_block->parent_block;
-    // };
 
     if (!(p >>= p.parse_token(Tt::brace_open)))
     {
@@ -590,7 +583,7 @@ Parser parse_type(Parser p, AstNode *&out_type)
     Token identifier{};
     if (p >>= p.quiet().parse_token(Tt::identifier, &identifier))
     {
-        auto type        = new AstSimpleType{};
+        auto type        = new AstTypeIdentifier{};
         type->identifier = identifier;
 
         out_type = type;
@@ -683,12 +676,12 @@ Parser parse_decl(Parser p, AstDeclaration &out_decl)
     return p;
 }
 
-Parser parse_program(Parser p, AstProgram &out_program)
+Parser parse_module(Parser p, AstModule &out_module)
 {
     auto start = p;
 
     // p.current_block = &prog->block;
-    p.arm("parsing program");
+    p.arm("parsing module");
 
     while (true)
     {
@@ -698,7 +691,7 @@ Parser parse_program(Parser p, AstProgram &out_program)
             return start;
         }
 
-        out_program.block.statements.push_back(new AstDeclaration{decl});
+        out_module.block.statements.push_back(new AstDeclaration{decl});
 
         if (p.peek_token().type == Tt::eof)
         {
@@ -709,12 +702,12 @@ Parser parse_program(Parser p, AstProgram &out_program)
     return p;
 }
 
-bool parse_program(std::string_view source, AstProgram &prog)
+bool parse_module(std::string_view source, AstModule &prog)
 {
     Lexer lexer{source};
     Parser p{lexer};
 
-    if (!(p >>= parse_program(p, prog)))
+    if (!(p >>= parse_module(p, prog)))
     {
         std::cout << "Compilation failed" << std::endl;
 

@@ -2,6 +2,8 @@
 
 #include <cassert>
 #include <cstddef>
+#include <format>
+#include <string>
 #include <string_view>
 
 enum class TokenType
@@ -133,18 +135,30 @@ inline int binary_operator_precedence(TokenType binop)
 
 struct Cursor
 {
-    const char *at;
-    int line;
-    int line_offset;
+    const char *at{};
+    int line{};
+    int line_offset{};
 };
 
 struct Token
 {
-    TokenType type;
-    Cursor pos;
-    size_t len;
+    TokenType type{};
+    Cursor pos{};
+    size_t len{};
 
     inline std::string_view text() const { return std::string_view{this->pos.at, this->len}; }
+
+    inline std::string to_string() const
+    {
+        switch (this->type)
+        {
+            case TokenType::identifier: return std::format("Identifier '{}'", this->text());
+            case TokenType::keyword:    return std::format("Keyword '{}'", this->text());
+            case TokenType::numerical_literal:
+                return std::format("Literal '{}'", this->text());  // TODO: Shorten string literals
+            default: return ::to_string(this->type);
+        }
+    }
 };
 
 struct Lexer
@@ -155,8 +169,8 @@ struct Lexer
     {
     }
 
-    std::string_view source;
-    Cursor cursor;
+    std::string_view source{};
+    Cursor cursor{};
 
     Token peek_token() const;
     Token next_token();

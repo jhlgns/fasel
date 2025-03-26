@@ -3,7 +3,7 @@
 #include <cassert>
 #include <string_view>
 
-inline std::string_view get_line(std::string_view source, const char *offset)
+inline std::string_view extract_line(std::string_view source, const char *offset)
 {
     if (source.size() == 0)
     {

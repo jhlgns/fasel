@@ -103,9 +103,9 @@ inline AstProcedureSignature *make_procedure_signature(std::vector<AstDeclaratio
     return result;
 }
 
-inline AstProgram *make_program(std::vector<AstDeclaration> declarations)
+inline AstModule *make_module(std::vector<AstDeclaration> declarations)
 {
-    auto result = new AstProgram{};
+    auto result = new AstModule{};
     for (auto &&decl : declarations)
     {
         result->block.statements.push_back(new AstDeclaration{std::move(decl)});
@@ -120,9 +120,9 @@ inline AstReturn *make_return(AstNode *expression)
     return result;
 }
 
-inline AstSimpleType *make_simple_type(std::string_view identifier)
+inline AstTypeIdentifier *make_simple_type(std::string_view identifier)
 {
-    auto result        = new AstSimpleType{};
+    auto result        = new AstTypeIdentifier{};
     result->identifier = Token{
         .type = Tt::identifier,
         .pos  = Cursor{.at = identifier.data(), .line = -1, .line_offset = -1},

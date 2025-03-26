@@ -1,3 +1,4 @@
+#include "basics.h"
 #include "parse.h"
 #include <catch2/catch_test_macros.hpp>
 
@@ -270,7 +271,7 @@ namespace assertions
 
         void operator()(AstNode *node)
         {
-            auto type = ast_cast<AstSimpleType>(node);
+            auto type = ast_cast<AstTypeIdentifier>(node);
             REQUIRE(type != nullptr);
 
             REQUIRE(this->identifier == type->identifier.text());
@@ -308,13 +309,13 @@ namespace assertions
 
 namespace as = assertions;
 
-AstProcedure *parse_program_and_get_main(std::string_view source)
+AstProcedure *parse_module_and_get_main(std::string_view source)
 {
-    AstProgram program{};
-    REQUIRE(parse_program(source, program));
+    AstModule module{};
+    REQUIRE(parse_module(source, module));
 
     AstProcedure *main{};
-    for (auto statement : program.block.statements)
+    for (auto statement : module.block.statements)
     {
         auto decl = ast_cast<AstDeclaration>(statement);
         REQUIRE(decl != nullptr);
@@ -368,7 +369,7 @@ void test_literal(std::string_view literal_text, T value)
                     .type            = as::IsNull{},
                     .init_expression = literal,
                 },
-            }}}(parse_program_and_get_main(source));
+            }}}(parse_module_and_get_main(source));
 }
 
 TEST_CASE("Literals", "[parse]")
@@ -487,7 +488,7 @@ main := proc() void {
                         .rhs  = as::Identifier{"b"},
                     },
                 },
-        }}(parse_program_and_get_main(source));
+        }}(parse_module_and_get_main(source));
 }
 
 TEST_CASE("Binary operator precedence", "[parse]")
@@ -553,7 +554,7 @@ main := proc() void {
                             .rhs = as::Literal{.int_value = 5},
                         },
                     },
-            }}(parse_program_and_get_main(source));
+            }}(parse_module_and_get_main(source));
 }
 
 TEST_CASE("Declaration", "[parse]")
@@ -595,7 +596,7 @@ main := proc() void {
                             .init_expression = as::Procedure{.signature = as::Nop{}, .body = as::Nop{}},
                         },
                     }},
-    }(parse_program_and_get_main(source));
+    }(parse_module_and_get_main(source));
 }
 
 TEST_CASE("Parenthesis expression", "[parse]")
@@ -626,7 +627,7 @@ main := proc() void {
                             .rhs = as::Literal{.int_value = 3},
                         },
                 }}},
-    }(parse_program_and_get_main(source));
+    }(parse_module_and_get_main(source));
 
     // std::cout << dump_node(0, parse_program_and_get_main(source));
 }
@@ -710,7 +711,7 @@ main := proc() void {
                                             },
                                         }},
                         },
-                    }}}(parse_program_and_get_main(source));
+                    }}}(parse_module_and_get_main(source));
 }
 
 TEST_CASE("Procedure signature", "[parse]")
@@ -774,7 +775,7 @@ main := proc() void {
                                             .return_type = as::SimpleType{"i64"}},
                                     .body = as::Block{.statements = {}},
                                 }},
-                    }}}(parse_program_and_get_main(source));
+                    }}}(parse_module_and_get_main(source));
 }
 
 TEST_CASE("Types", "[parse]")
@@ -879,10 +880,10 @@ main := proc() void {
                             .init_expression = as::IsNull{},
                         },
                     }},
-    }(parse_program_and_get_main(source));
+    }(parse_module_and_get_main(source));
 }
 
-TEST_CASE("Program", "[parse]")
+TEST_CASE("Module", "[parse]")
 {
     auto source = R"(
 /*
@@ -910,8 +911,8 @@ main := proc() void {
 
 )"sv;
 
-    AstProgram program;
-    REQUIRE(parse_program(source, program));
+    AstModule module;
+    REQUIRE(parse_module(source, module));
 
     // TODO
     // std::cout << dump_node(0, &program) << std::endl;

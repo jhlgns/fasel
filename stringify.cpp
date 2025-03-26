@@ -1,4 +1,5 @@
 #include "stringify.h"
+#include "basics.h"
 #include <format>
 
 template<typename... Args>
@@ -59,11 +60,11 @@ std::string to_string(int indent_level, AstIdentifier *node)
     return result;
 }
 
-std::string to_string(int indent_level, AstSimpleType *node)
+std::string to_string(int indent_level, AstTypeIdentifier *node)
 {
     std::string result;
 
-    result += indent(indent_level, std::format("SimpleType({})", node->identifier.text()));
+    result += indent(indent_level, std::format("TypeIdentifier({})", node->identifier.text()));
 
     return result;
 }
@@ -141,11 +142,11 @@ std::string to_string(int indent_level, AstProcedureSignature *node)
     return result;
 }
 
-std::string to_string(int indent_level, AstProgram *node)
+std::string to_string(int indent_level, AstModule *node)
 {
     std::string result;
 
-    result += indent(indent_level, "Program(\n");
+    result += indent(indent_level, "Module(\n");
 
     for (AstNode *decl : node->block.statements)
     {
@@ -187,9 +188,9 @@ std::string dump_node(int indent_level, AstNode *node)
         case AstKind::procedure:           return to_string(indent_level, static_cast<AstProcedure *>(node));
         case AstKind::procedure_call:      return to_string(indent_level, static_cast<AstProcedureCall *>(node));
         case AstKind::procedure_signature: return to_string(indent_level, static_cast<AstProcedureSignature *>(node));
-        case AstKind::program:             return to_string(indent_level, static_cast<AstProgram *>(node));
+        case AstKind::module:              return to_string(indent_level, static_cast<AstModule *>(node));
         case AstKind::return_statement:    return to_string(indent_level, static_cast<AstReturn *>(node));
-        case AstKind::simple_type:         return to_string(indent_level, static_cast<AstSimpleType *>(node));
+        case AstKind::type_identifier:     return to_string(indent_level, static_cast<AstTypeIdentifier *>(node));
         default:                           assert(false);
     }
 

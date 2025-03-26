@@ -17,16 +17,18 @@ enum class NodeKind
     identifier,
     if_statement,
     literal,
+    module,
     procedure,
     procedure_call,
     procedure_signature,
     return_statement,
     type_cast,
-    program,
-    simple_type,
+
+    basic_type,
     pointer_type,
     array_type,
     struct_type,
+
     nop,
 };
 
@@ -112,7 +114,7 @@ struct NodeOfKind : Node
 
 struct BinaryOperatorNode : NodeOfKind<NodeKind::binary_operator>
 {
-    TokenType operator_type{};
+    TokenType operator_kind{};
     Node *lhs{};
     Node *rhs{};
 };
@@ -134,8 +136,8 @@ struct DeclarationNode : NodeOfKind<NodeKind::declaration>
 struct BlockNode : NodeOfKind<NodeKind::block>
 {
     std::vector<Node *> statements{};
-    int64_t offset_from_parent_block{};
-    int64_t memory_size{};  // Size of all local variables
+    // int64_t offset_from_parent_block{};
+    // int64_t memory_size{};  // Size of all local variables
     // int64_t memory_size_of_args{};  // Size of all procedure arguments
     int64_t current_time{};  // TODO: Document
 
@@ -151,7 +153,7 @@ struct IdentifierNode : NodeOfKind<NodeKind::identifier>
     std::string_view identifier{};
 };
 
-struct IfNode : NodeOfKind<NodeKind::identifier>
+struct IfNode : NodeOfKind<NodeKind::if_statement>
 {
     Node *condition{};
     BlockNode *then_block{};
@@ -190,16 +192,16 @@ struct ReturnNode : NodeOfKind<NodeKind::return_statement>
 
 struct TypeCastNode : NodeOfKind<NodeKind::type_cast>
 {
+    // NOTE: The requested type is set in Node::type... hmmm...
     Node *expression{};
 };
 
-// TODO: Rename to module
-struct ProgramNode : NodeOfKind<NodeKind::program>
+struct ModuleNode : NodeOfKind<NodeKind::module>
 {
     BlockNode *block{};
 };
 
-struct SimpleTypeNode : NodeOfKind<NodeKind::simple_type>
+struct BasicTypeNode : NodeOfKind<NodeKind::basic_type>
 {
     enum class Kind
     {
@@ -212,7 +214,7 @@ struct SimpleTypeNode : NodeOfKind<NodeKind::simple_type>
         type,  // This is the kind of all types themselves
     };
 
-    explicit SimpleTypeNode(Kind type_kind, int64_t size)
+    explicit BasicTypeNode(Kind type_kind, int64_t size)
         : type_kind{type_kind}
         , size{size}
     {
@@ -244,7 +246,7 @@ struct StructTypeNode : NodeOfKind<NodeKind::struct_type>
     // TODO
 };
 
-// This node is implicitly created for optional expressions that have been omitted in the program
+// This node is implicitly created for optional expressions that have been omitted
 // (like the init expression of a local variable)
 struct NopNode : NodeOfKind<NodeKind::nop>
 {
@@ -255,19 +257,19 @@ std::string type_to_string(const Node *type);
 
 struct BuiltinTypes
 {
-    static const SimpleTypeNode voyd;
-    static const SimpleTypeNode i64;
-    static const SimpleTypeNode i32;
-    static const SimpleTypeNode i16;
-    static const SimpleTypeNode i8;
-    static const SimpleTypeNode u64;
-    static const SimpleTypeNode u32;
-    static const SimpleTypeNode u16;
-    static const SimpleTypeNode u8;
-    static const SimpleTypeNode f32;
-    static const SimpleTypeNode f64;
-    static const SimpleTypeNode boolean;
-    static const SimpleTypeNode type;
+    static const BasicTypeNode voyd;
+    static const BasicTypeNode i64;
+    static const BasicTypeNode i32;
+    static const BasicTypeNode i16;
+    static const BasicTypeNode i8;
+    static const BasicTypeNode u64;
+    static const BasicTypeNode u32;
+    static const BasicTypeNode u16;
+    static const BasicTypeNode u8;
+    static const BasicTypeNode f32;
+    static const BasicTypeNode f64;
+    static const BasicTypeNode boolean;
+    static const BasicTypeNode type;
     static const ProcedureSignatureNode main_signature;
 
     static const std::vector<std::tuple<const Node *, std::string_view>> type_names;
@@ -277,8 +279,8 @@ Node *make_node(BlockNode *containing_block, AstNode *ast);
 
 struct TypeChecker
 {
-    DeclarationNode *current_declaration{};
     bool print_errors = false;
+    DeclarationNode *current_declaration{};
     ProcedureNode *current_procedure{};
 
     [[nodiscard]] bool typecheck(Node *node);

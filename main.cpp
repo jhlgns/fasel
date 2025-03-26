@@ -48,31 +48,31 @@ int main(int argc, char **argv)
     }
 
     // 1. Parsing
-    AstProgram program;
-    if (parse_program(source.get(), program) == false)
+    AstModule module;
+    if (parse_module(source.get(), module) == false)
     {
         std::cout << "Parsing failed" << std::endl;
         return 1;
     }
 
     // 2. Typechecking
-    auto program_node = node_cast<ProgramNode>(make_node(nullptr, &program));
+    auto module_node = node_cast<ModuleNode>(make_node(nullptr, &module));
 
     TypeChecker type_checker{.print_errors = true};
-    if (type_checker.typecheck(program_node) == false)
+    if (type_checker.typecheck(module_node) == false)
     {
         std::cout << "Typechecking failed" << std::endl;
         return 1;
     }
 
-    for (auto [name, decl] : program_node->block->declarations)
+    for (auto [name, decl] : module_node->block->declarations)
     {
         std::cout << "XXX Found global symbol: " << name << " (" << type_to_string(decl->init_expression->type) << ")"
                   << std::endl;
     }
 
     // 3. Compile to IR
-    auto compilation_result = compile_to_ir(program_node);
+    auto compilation_result = compile_to_ir(module_node);
     compilation_result.module->print(llvm::outs(), nullptr);
 
     // 4. Run JIT

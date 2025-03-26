@@ -28,7 +28,7 @@ TEST_CASE("Line extraction", "[string_util]")
             offset = 0;
         }
 
-        auto received_line = get_line(source, source.data() + offset);
+        auto received_line = extract_line(source, source.data() + offset);
         REQUIRE(received_line == expected_line);
     }
 }
