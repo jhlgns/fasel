@@ -30,7 +30,7 @@ ScopeExit<F> operator+(DEFER_TAG, F &&f)
 #define DEFER_2(x, y) DEFER_1(x, y)
 #define defer auto DEFER_2(ScopeExit, __LINE__) = DEFER_TAG{} + [&]()
 
-#define CHECK(condition)                          \
+#define ENSURE(condition)                         \
     if (!(condition))                             \
     {                                             \
         std::cout << "Check failed" << std::endl; \

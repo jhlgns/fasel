@@ -1,6 +1,6 @@
-#include <catch2/catch_test_macros.hpp>
-
 #include "basics.h"
+
+#include <catch2/catch_test_macros.hpp>
 
 // #include "compile_ir.h"
 // #include "jit.h"
@@ -36,6 +36,7 @@ main := proc() {
 #    include "compile.h"
 #    include "parse.h"
 #    include "vm.h"
+
 #    include <catch2/catch_test_macros.hpp>
 
 void test_expression(std::string_view expression, int64_t expected_result)

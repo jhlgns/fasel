@@ -1,6 +1,7 @@
 #pragma once
 
 #include "lex.h"
+
 #include <vector>
 
 enum class AstKind

@@ -1,5 +1,6 @@
-#include "catch2/catch_test_macros.hpp"
 #include "string_util.hpp"
+
+#include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("Line extraction", "[string_util]")
 {

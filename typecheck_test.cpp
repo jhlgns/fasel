@@ -1,6 +1,7 @@
-#include "catch2/catch_test_macros.hpp"
 #include "test_utils.h"
 #include "typecheck.h"
+
+#include <catch2/catch_test_macros.hpp>
 
 using Types = BuiltinTypes;
 
@@ -8,9 +9,9 @@ using Types = BuiltinTypes;
 
 void test_type(AstNode *ast, const Node *expected_type)
 {
-    TypeChecker type_checker;
+    TypeChecker type_checker{};
 
-    BlockNode block;
+    BlockNode block{};
 
     auto node = make_node(&block, ast);
     REQUIRE(node != nullptr);

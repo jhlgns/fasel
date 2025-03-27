@@ -1,15 +1,15 @@
-#include <cassert>
-#include <cstdarg>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-
 #include "basics.h"
 #include "compile_ir.h"
 #include "jit.h"
 #include "parse.h"
 #include "typecheck.h"
-#include "llvm/IR/Module.h"
+
+#include <cassert>
+#include <cstdarg>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <llvm/IR/Module.h>
 
 int main(int argc, char **argv)
 {

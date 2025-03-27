@@ -1,15 +1,8 @@
 #include "compile_ir.h"
+
 #include "typecheck.h"
 
 #include <llvm/ADT/StringRef.h>
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/ExecutionEngine/Orc/CompileUtils.h>
-#include <llvm/ExecutionEngine/Orc/Core.h>
-#include <llvm/ExecutionEngine/Orc/ExecutionUtils.h>
-#include <llvm/ExecutionEngine/Orc/IRCompileLayer.h>
-#include <llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h>
-#include <llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h>
-#include <llvm/ExecutionEngine/SectionMemoryManager.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/NoFolder.h>
@@ -162,10 +155,10 @@ struct IrCompiler
         auto is_store = bin_op->operator_kind == Tt::assign;
 
         auto lhs = this->generate_code(bin_op->lhs, is_store);
-        CHECK(lhs != nullptr);
+        ENSURE(lhs != nullptr);
 
         auto rhs = this->generate_code(bin_op->rhs);
-        CHECK(rhs != nullptr);
+        ENSURE(rhs != nullptr);
 
         if (bin_op->operator_kind == Tt::assign)
         {
@@ -312,7 +305,7 @@ struct IrCompiler
         }
 
          // TODO: There are no global variables yet and they are not on the roadmap
-        CHECK(decl->containing_block->is_global() == false);
+        ENSURE(decl->containing_block->is_global() == false);
 
         // Declaration assignment to init expresion
         auto value = this->generate_code(decl->init_expression);

@@ -2,6 +2,7 @@
 
 #include "basics.h"
 #include "lex.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -145,7 +146,7 @@ struct BlockNode : NodeOfKind<NodeKind::block>
 
     inline bool is_global() const { return this->containing_block == nullptr; }
 
-    DeclarationNode *find_declaration(std::string_view name) const;
+    DeclarationNode *find_declaration(std::string_view name, bool recurse = true) const;
 };
 
 struct IdentifierNode : NodeOfKind<NodeKind::identifier>
@@ -211,7 +212,7 @@ struct BasicTypeNode : NodeOfKind<NodeKind::basic_type>
         signed_integer,
         unsigned_integer,
         floatingpoint,
-        type,  // This is the kind of all types themselves
+        type,
     };
 
     explicit BasicTypeNode(Kind type_kind, int64_t size)

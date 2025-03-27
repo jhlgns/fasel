@@ -1,4 +1,5 @@
 #include "typecheck.h"
+
 #include "parse.h"
 
 enum class BinaryOperatorCategory
@@ -58,7 +59,7 @@ BinaryOperatorCategory bin_op_category(TokenType type)
     }
 }
 
-DeclarationNode *BlockNode::find_declaration(std::string_view name) const
+DeclarationNode *BlockNode::find_declaration(std::string_view name, bool recurse) const
 {
     auto it = this->declarations.find(std::string{name});
     if (it != this->declarations.end())
@@ -66,7 +67,7 @@ DeclarationNode *BlockNode::find_declaration(std::string_view name) const
         return it->second;
     }
 
-    if (this->containing_block != nullptr)
+    if (recurse && this->containing_block != nullptr)
     {
         return this->containing_block->find_declaration(name);
     }
@@ -548,9 +549,9 @@ bool TypeChecker::typecheck(Node *node)
                 this->current_declaration = old_decl;
             };
 
-            if (decl->containing_block->find_declaration(decl->identifier) != nullptr)
+            if (decl->containing_block->find_declaration(decl->identifier, false) != nullptr)
             {
-                this->error(decl, std::format("Duplicate declaration identifier '{}'", decl->identifier));
+                this->error(decl, std::format("Duplicate declaration of '{}'", decl->identifier));
                 return false;
             }
 
@@ -795,7 +796,6 @@ bool TypeChecker::typecheck(Node *node)
 
             if (retyrn->expression->kind == NodeKind::nop)
             {
-                retyrn->type = &BuiltinTypes::voyd;
                 return true;
             }
             else if (typecheck(retyrn->expression) == false)
@@ -859,7 +859,7 @@ bool TypeChecker::typecheck(Node *node)
 
             if (src_basic->is_numerical() == false || dest_basic->is_numerical() == false)
             {
-                this->error(cast, "Right now, only casts between numerical types are implemented");
+                this->error(cast, "TODO: Currently only casts between numerical types are implemented");
                 return false;
             }
 
@@ -877,6 +877,7 @@ void TypeChecker::error(const Node *node, std::string_view message)
         return;
     }
 
+    // TODO: Print a string representation of the node for context
     std::cout << "Type error: " << message << std::endl;
 }
 
@@ -978,7 +979,7 @@ bool types_equal(const Node *lhs, const Node *rhs)
     }
 }
 
-std::string type_to_string(const Node *type)
+std::string type_to_string(const Node *type /*, BlockNode *block */)
 {
     switch (type->kind)
     {
