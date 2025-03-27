@@ -29,9 +29,9 @@ Token emit(Lexer &lexer, const Cursor &start, TokenType t)
     assert(t == Tt::eof || lexer.cursor.at > start.at);
 
     return Token{
-        .type = t,
-        .pos  = start,
-        .len  = static_cast<size_t>(lexer.cursor.at - start.at),
+        .type   = t,
+        .pos    = start,
+        .length = static_cast<size_t>(lexer.cursor.at - start.at),
     };
 }
 
@@ -160,7 +160,39 @@ Token Lexer::next_token()
             next(this->cursor);
         }
 
-        return emit(*this, start, Tt::numerical_literal);
+        return emit(*this, start, Tt::number_literal);
+    }
+
+    if (*this->cursor.at == '"')
+    {
+        next(this->cursor);
+        while (*this->cursor.at != '"')
+        {
+            if (*this->cursor.at == '\0')
+            {
+                std::cout << std::format(
+                                 "Lexer error at {}:{}: unterminated string literal",
+                                 this->cursor.line,
+                                 this->cursor.line_offset)
+                          << std::endl;
+            }
+
+            if (this->cursor.at[0] == '\\' && this->cursor.at[1] == '"')
+            {
+                next(this->cursor);
+            }
+
+            next(this->cursor);
+        }
+
+        next(this->cursor);
+
+        // ++start.at;
+        // --this->cursor.at;
+        auto result = emit(*this, start, Tt::string_literal);
+        // ++this->cursor.at;
+
+        return result;
     }
 
     // clang-format off

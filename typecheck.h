@@ -41,6 +41,7 @@ struct BuiltinTypes
     static BasicTypeNode f64;
     static BasicTypeNode boolean;
     static BasicTypeNode type;
+    static PointerTypeNode string_literal;
     static ProcedureSignatureNode main_signature;
 
     static const std::vector<std::tuple<BasicTypeNode *, std::string_view>> type_names;

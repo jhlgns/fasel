@@ -664,6 +664,13 @@ bool TypeChecker::typecheck(Node *node)
                 return true;
             }
 
+            if (std::holds_alternative<std::string>(literal->value))
+            {
+                assert(literal->suffix == '\0');
+                literal->type = &BuiltinTypes::string_literal;
+                return true;
+            }
+
             UNREACHED;
             return false;
         }
@@ -1025,6 +1032,13 @@ BasicTypeNode BuiltinTypes::f32     = BasicTypeNode{BasicTypeNode::Kind::floatin
 BasicTypeNode BuiltinTypes::f64     = BasicTypeNode{BasicTypeNode::Kind::floatingpoint, 8};
 BasicTypeNode BuiltinTypes::boolean = BasicTypeNode{BasicTypeNode::Kind::boolean, 1};
 BasicTypeNode BuiltinTypes::type    = BasicTypeNode{BasicTypeNode::Kind::type, -1};
+
+PointerTypeNode BuiltinTypes::string_literal = []
+{
+    PointerTypeNode result{};
+    result.target_type = &BuiltinTypes::i8;
+    return result;
+}();
 
 ProcedureSignatureNode BuiltinTypes::main_signature = []
 {

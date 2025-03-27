@@ -1,5 +1,6 @@
 #pragma once
 
+#include "basics.h"
 #include "lex.h"
 
 #include <vector>
@@ -42,7 +43,7 @@ inline const char *to_string(AstKind kind)
         case AstKind::type_identifier:     return "type_identifier";
     }
 
-    assert(false);
+    UNREACHED;
 }
 
 struct AstNode
@@ -120,7 +121,7 @@ struct AstLiteral : AstOfKind<AstKind::literal>
 {
     Token token{};
     char suffix{};  // 'u' or 'f'
-    std::variant<bool, uint64_t, float, double> value{};
+    std::variant<bool, uint64_t, float, double, std::string> value{};
 };
 
 struct AstProcedureSignature : AstOfKind<AstKind::procedure_signature>

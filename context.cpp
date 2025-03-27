@@ -70,7 +70,7 @@ IfNode *Context::make_if(Node *condition, BlockNode *then_block, BlockNode *else
     return result;
 }
 
-LiteralNode *Context::make_literal(std::variant<bool, uint64_t, float, double> value, char suffix)
+LiteralNode *Context::make_literal(std::variant<bool, uint64_t, float, double, std::string> value, char suffix)
 {
     assert(std::holds_alternative<bool>(value) == false || suffix == '\0');
     assert(std::holds_alternative<float>(value) == false || suffix == 'f');
@@ -113,6 +113,13 @@ LiteralNode *Context::make_float_literal(float value)
 }
 
 LiteralNode *Context::make_double_literal(double value)
+{
+    auto result   = new (*this) LiteralNode{};
+    result->value = value;
+    return result;
+}
+
+LiteralNode *Context::make_string_literal(std::string value)
 {
     auto result   = new (*this) LiteralNode{};
     result->value = value;

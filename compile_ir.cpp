@@ -341,6 +341,42 @@ struct IrCompiler
 
     Value *generate_code(LiteralNode *literal)
     {
+        auto basic_type = node_cast<BasicTypeNode>(literal->type);
+
+        if (std::holds_alternative<uint64_t>(literal->value))
+        {
+            assert(basic_type != nullptr);
+            auto value = std::get<uint64_t>(literal->value);
+            return ConstantInt::get(IntegerType::get(this->llvm_context, basic_type->size * 8), value);
+        }
+
+        if (std::holds_alternative<float>(literal->value))
+        {
+            auto value = std::get<float>(literal->value);
+            return ConstantFP::get(this->llvm_context, APFloat{value});
+        }
+
+        if (std::holds_alternative<double>(literal->value))
+        {
+            auto value = std::get<double>(literal->value);
+            return ConstantFP::get(this->ir.getDoubleTy(), value);
+        }
+
+        if (std::holds_alternative<bool>(literal->value))
+        {
+            auto value = std::get<bool>(literal->value);
+            return ConstantInt::get(this->ir.getInt1Ty(), value);
+        }
+
+        if (std::holds_alternative<std::string>(literal->value))
+        {
+            auto value = std::get<std::string>(literal->value);
+            return this->ir.CreateGlobalString(value, "string");
+        }
+
+        UNREACHED;
+
+#if 0
         auto basic_type = node_cast<BasicTypeNode, true>(literal->type);
         assert(basic_type != nullptr);  // TODO: Struct types will appear here
 
@@ -381,6 +417,7 @@ struct IrCompiler
 
             default: TODO;
         }
+#endif
     }
 
     Value *generate_code(ProcedureNode *proc)

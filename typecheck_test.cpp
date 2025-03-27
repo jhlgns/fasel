@@ -46,6 +46,7 @@ TEST_CASE("Literals", "[typecheck]")
     test_type(ctx.make_float_literal(1.0f), &Types::f32);
     test_type(ctx.make_double_literal(1.0), &Types::f64);
     test_type(ctx.make_bool_literal(false), &Types::boolean);
+    test_type(ctx.make_string_literal("Lalalalala"), &Types::string_literal);
 }
 
 TEST_CASE("Binary operators", "[typecheck]")
@@ -148,6 +149,14 @@ TEST_CASE("Binary operators", "[typecheck]")
         test_type(ctx.make_binary_operator(Tt::mod, ctx.make_sint_literal(1), ctx.make_float_literal(2)), &Types::f64);
         test_type(ctx.make_binary_operator(Tt::mod, ctx.make_double_literal(1), ctx.make_sint_literal(2)), &Types::f64);
         test_type(ctx.make_binary_operator(Tt::mod, ctx.make_sint_literal(1), ctx.make_double_literal(2)), &Types::f64);
+    };
+
+    SECTION("Invalid operands")
+    {
+        test_type(
+            ctx.make_binary_operator(Tt::plus, ctx.make_string_literal("text"), ctx.make_sint_literal(2)),
+            nullptr);
+        test_type(ctx.make_binary_operator(Tt::minus, ctx.make_bool_literal(1), ctx.make_uint_literal(2)), nullptr);
     };
 
     SECTION("Different signedness")

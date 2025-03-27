@@ -157,7 +157,7 @@ struct IfNode : NodeOfKind<NodeKind::if_statement>
 
 struct LiteralNode : NodeOfKind<NodeKind::literal>
 {
-    std::variant<bool, uint64_t, float, double> value{};
+    std::variant<bool, uint64_t, float, double, std::string> value{};
     char suffix{};
 };
 

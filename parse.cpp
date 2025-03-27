@@ -40,7 +40,7 @@ struct Parser
 
         auto message = std::format(
             "Parser error at {}:{}\n{}\n{}",
-            start.lexer.cursor.line,
+            start.lexer.cursor.line,  // TODO: This should not be start, right? Remove start?
             start.lexer.cursor.line_offset,
             line,
             error);
@@ -96,9 +96,9 @@ struct Parser
         }
 
         auto len = keyword.size();
-        if (token.len < len)
+        if (token.length < len)
         {
-            len = token.len;
+            len = token.length;
         }
         if (strncmp(token.pos.at, keyword.data(), len) != 0)
         {
@@ -321,9 +321,9 @@ Parser parse_primary_expr(Parser p, AstNode *&out_primary_expr)
     auto start = p;
 
     Token token{};
-    if (p >>= p.quiet().parse_token(Tt::numerical_literal, &token))
+    if (p >>= p.quiet().parse_token(Tt::number_literal, &token))
     {
-        assert(token.len > 0);
+        assert(token.length > 0);
 
         p.arm("parsing number literal");
 
@@ -331,7 +331,7 @@ Parser parse_primary_expr(Parser p, AstNode *&out_primary_expr)
         literal.token = token;
 
         auto begin  = token.pos.at;
-        auto end    = token.pos.at + token.len;
+        auto end    = token.pos.at + token.length;
         auto base   = 10;
         auto suffix = '\0';
         std::from_chars_result result{};
@@ -415,6 +415,57 @@ Parser parse_primary_expr(Parser p, AstNode *&out_primary_expr)
         }
 
         literal.suffix = suffix;
+
+        out_primary_expr = new AstLiteral{std::move(literal)};
+        return p;
+    }
+
+    if (p >>= p.quiet().parse_token(Tt::string_literal, &token))
+    {
+        assert(token.length >= 2);
+
+        p.arm("parsing string literal");
+
+        AstLiteral literal{};
+        literal.token = token;
+
+        // The raw string literal is always going to be at most as long as the encoded string literal
+        std::vector<char> escaped_string;
+        escaped_string.reserve(token.text().size());
+
+        for (auto at = token.pos.at + 1; at < token.pos.at + token.length - 1; ++at)
+        {
+            if (*at == '\\')
+            {
+                auto next = at[1];
+
+                switch (next)
+                {
+                    case 'a':  escaped_string.push_back('\a'); break;
+                    case 'b':  escaped_string.push_back('\b'); break;
+                    case 'e':  escaped_string.push_back('\e'); break;
+                    case 'f':  escaped_string.push_back('\f'); break;
+                    case 'n':  escaped_string.push_back('\n'); break;
+                    case 'r':  escaped_string.push_back('\r'); break;
+                    case 't':  escaped_string.push_back('\t'); break;
+                    case 'v':  escaped_string.push_back('\v'); break;
+                    case '0':  escaped_string.push_back('\0'); break;
+                    case '"':  escaped_string.push_back('"'); break;
+                    case '\\': escaped_string.push_back('\\'); break;
+                    default:   p.error(start, "Invalid escape sequence"); return start;
+                }
+
+                ++at;
+            }
+            else
+            {
+                escaped_string.push_back(*at);
+            }
+        }
+
+        escaped_string.push_back('\0');
+
+        literal.value.emplace<std::string>(escaped_string.data());
 
         out_primary_expr = new AstLiteral{std::move(literal)};
         return p;
@@ -610,7 +661,7 @@ Parser parse_type(Parser p, AstNode *&out_type)
     {
         AstArrayType type{};
 
-        // TODO: Could be empty or '..'
+                // TODO: Could be empty or '..'
         if (!(p >>= parse_expr(p, type.length_expression)))
         {
             return start;
@@ -682,7 +733,7 @@ Parser parse_module(Parser p, AstModule &out_module)
 {
     auto start = p;
 
-    // p.current_block = &prog->block;
+            // p.current_block = &prog->block;
     p.arm("parsing module");
 
     while (true)

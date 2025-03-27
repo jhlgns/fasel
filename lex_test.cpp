@@ -17,6 +17,6 @@ TEST_CASE("Integer literals", "[lex]")
     require_sequence(
         "1",
         {
-            [](Token token) { return token.type == Tt::numerical_literal && token.text() == "1"; },
+            [](Token token) { return token.type == Tt::number_literal && token.text() == "1"; },
         });
 }

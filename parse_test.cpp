@@ -142,15 +142,16 @@ namespace assertions
     struct Literal
     {
         std::optional<Token> token;
+        std::optional<bool> bool_value;
         std::optional<int64_t> int_value;
         std::optional<float> float_value;
         std::optional<double> double_value;
-        std::optional<bool> bool_value;
+        std::optional<std::string> string_value;
 
         void operator()(AstNode *node)
         {
             auto n = this->int_value.has_value() + this->float_value.has_value() + this->double_value.has_value() +
-                     this->bool_value.has_value();
+                     this->bool_value.has_value() + this->string_value.has_value();
             REQUIRE(n == 1);
 
             auto literal = ast_cast<AstLiteral>(node);
@@ -159,6 +160,13 @@ namespace assertions
             if (this->token.has_value())
             {
                 this->token.value()(literal->token);
+            }
+
+            if (this->bool_value.has_value())
+            {
+                REQUIRE(std::holds_alternative<bool>(literal->value));
+                auto literal_bool_value = std::get<bool>(literal->value);
+                REQUIRE(this->bool_value.value() == literal_bool_value);
             }
 
             if (this->int_value.has_value())
@@ -182,11 +190,11 @@ namespace assertions
                 REQUIRE(this->double_value.value() == literal_double_value);
             }
 
-            if (this->bool_value.has_value())
+            if (this->string_value.has_value())
             {
-                REQUIRE(std::holds_alternative<bool>(literal->value));
-                auto literal_bool_value = std::get<bool>(literal->value);
-                REQUIRE(this->bool_value.value() == literal_bool_value);
+                REQUIRE(std::holds_alternative<std::string>(literal->value));
+                auto literal_string_value = std::get<std::string>(literal->value);
+                REQUIRE(this->string_value.value() == literal_string_value);
             }
         }
     };
@@ -355,6 +363,10 @@ void test_literal(std::string_view literal_text, T value)
     {
         literal.bool_value = value;
     }
+    else if constexpr (std::is_same_v<T, std::string>)
+    {
+        literal.string_value = value;
+    }
     else
     {
         static_assert(false, "Invalid type");
@@ -431,6 +443,18 @@ TEST_CASE("Literals", "[parse]")
     // DOUBLE_CASE(2.2250738585072014E-308);  // double min value
     // DOUBLE_CASE(1.7976931348623157E+308);  // double max value
 #undef DOUBLE_CASE
+
+#define STRING_CASE(literal) test_literal<std::string>(#literal, literal);
+    STRING_CASE("");
+    STRING_CASE(" ");
+    STRING_CASE("\0\0\0");
+    STRING_CASE("*(){}:-=[]|&^<>1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ");
+    STRING_CASE("'\"\0TEXT\n");
+    STRING_CASE("\\\"\"\"\\\"");
+    STRING_CASE("This is a very normal string literal");
+    STRING_CASE("abc\ndef");
+    STRING_CASE(" \a\b\e\f\n\r\t\v\0\\\"");
+#undef STRING_CASE
 }
 
 TEST_CASE("Basic binary operators", "[parse]")

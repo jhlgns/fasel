@@ -1,5 +1,7 @@
 #pragma once
 
+#include "basics.h"
+
 #include <cassert>
 #include <cstddef>
 #include <format>
@@ -42,7 +44,8 @@ enum class TokenType
 
     identifier,
     keyword,
-    numerical_literal,
+    number_literal,
+    string_literal,
 
     single_line_comment,  // ...
     multi_line_comment,  // /* ... */
@@ -85,12 +88,15 @@ inline const char *to_string(TokenType t)
         case Tt::less_than:             return "less_than";
         case Tt::identifier:            return "identifier";
         case Tt::keyword:               return "keyword";
-        case Tt::numerical_literal:     return "numerical_literal";
+        case Tt::number_literal:     return "numerical_literal";
+        case Tt::string_literal:        return "string_literal";
         case Tt::single_line_comment:   return "single_line_comment";
         case Tt::multi_line_comment:    return "multi_line_comment";
         case Tt::eof:                   return "eof";
-        default:                        return "(unknown!)";
+        case Tt::none:                  return "(none)";
     }
+
+    UNREACHED;
 }
 
 // The higher the precedence, the stronger the operator binds its arguments.
@@ -144,9 +150,9 @@ struct Token
 {
     TokenType type{};
     Cursor pos{};
-    size_t len{};
+    size_t length{};
 
-    inline std::string_view text() const { return std::string_view{this->pos.at, this->len}; }
+    inline std::string_view text() const { return std::string_view{this->pos.at, this->length}; }
 
     inline std::string to_string() const
     {
@@ -154,7 +160,7 @@ struct Token
         {
             case TokenType::identifier: return std::format("Identifier '{}'", this->text());
             case TokenType::keyword:    return std::format("Keyword '{}'", this->text());
-            case TokenType::numerical_literal:
+            case TokenType::number_literal:
                 return std::format("Literal '{}'", this->text());  // TODO: Shorten string literals
             default: return ::to_string(this->type);
         }

@@ -14,12 +14,13 @@ struct Context
     DeclarationNode *make_declaration(std::string_view identifier, Node *specified_type, Node *init_expression);
     IdentifierNode *make_identifier(std::string_view identifier);
     IfNode *make_if(Node *condition, BlockNode *then_block, BlockNode *else_block);
-    LiteralNode *make_literal(std::variant<bool, uint64_t, float, double> value, char suffix);
+    LiteralNode *make_literal(std::variant<bool, uint64_t, float, double, std::string> value, char suffix);
     LiteralNode *make_bool_literal(bool value);
     LiteralNode *make_sint_literal(uint64_t value);
     LiteralNode *make_uint_literal(uint64_t value);
     LiteralNode *make_float_literal(float value);
     LiteralNode *make_double_literal(double value);
+    LiteralNode *make_string_literal(std::string value);
     ModuleNode *make_module(BlockNode *block);
     ModuleNode *make_module(std::vector<DeclarationNode *> declarations);
     ProcedureNode *make_procedure(ProcedureSignatureNode *signature, BlockNode *body, bool is_external);

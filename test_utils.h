@@ -24,7 +24,7 @@ inline AstDeclaration *make_declaration(std::string_view identifier, AstNode *sp
     result->identifier = Token{
         .type = Tt::identifier,
         .pos  = Cursor{.at = identifier.data(), .line = -1, .line_offset = -1},
-        .len  = identifier.size(),
+        .length  = identifier.size(),
     };
     result->type            = specified_type;
     result->init_expression = init_expression;
@@ -37,7 +37,7 @@ inline AstIdentifier *make_identifier(std::string_view identifier)
     result->identifier = Token{
         .type = Tt::identifier,
         .pos  = Cursor{.at = identifier.data(), .line = -1, .line_offset = -1},
-        .len  = identifier.size(),
+        .length  = identifier.size(),
     };
     return result;
 }
@@ -127,7 +127,7 @@ inline AstTypeIdentifier *make_simple_type(std::string_view identifier)
     result->identifier = Token{
         .type = Tt::identifier,
         .pos  = Cursor{.at = identifier.data(), .line = -1, .line_offset = -1},
-        .len  = identifier.size(),
+        .length  = identifier.size(),
     };
     return result;
 }
