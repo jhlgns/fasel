@@ -89,18 +89,18 @@ LiteralNode *Context::make_bool_literal(bool value)
     return result;
 }
 
-LiteralNode *Context::make_signed_int_literal(uint64_t value)
+LiteralNode *Context::make_sint_literal(uint64_t value)
+{
+    auto result   = new (*this) LiteralNode{};
+    result->value = value;
+    return result;
+}
+
+LiteralNode *Context::make_uint_literal(uint64_t value)
 {
     auto result    = new (*this) LiteralNode{};
     result->value  = value;
     result->suffix = 'u';
-    return result;
-}
-
-LiteralNode *Context::make_unsigned_int_literal(uint64_t value)
-{
-    auto result   = new (*this) LiteralNode{};
-    result->value = value;
     return result;
 }
 

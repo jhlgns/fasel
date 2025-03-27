@@ -16,8 +16,8 @@ struct Context
     IfNode *make_if(Node *condition, BlockNode *then_block, BlockNode *else_block);
     LiteralNode *make_literal(std::variant<bool, uint64_t, float, double> value, char suffix);
     LiteralNode *make_bool_literal(bool value);
-    LiteralNode *make_signed_int_literal(uint64_t value);
-    LiteralNode *make_unsigned_int_literal(uint64_t value);
+    LiteralNode *make_sint_literal(uint64_t value);
+    LiteralNode *make_uint_literal(uint64_t value);
     LiteralNode *make_float_literal(float value);
     LiteralNode *make_double_literal(double value);
     ModuleNode *make_module(BlockNode *block);
