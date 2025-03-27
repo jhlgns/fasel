@@ -25,7 +25,10 @@ struct Context
     ModuleNode *make_module(std::vector<DeclarationNode *> declarations);
     ProcedureNode *make_procedure(ProcedureSignatureNode *signature, BlockNode *body, bool is_external);
     ProcedureCallNode *make_procedure_call(Node *procedure, std::vector<Node *> arguments);
-    ProcedureSignatureNode *make_procedure_signature(std::vector<DeclarationNode *> arguments, Node *return_type);
+    ProcedureSignatureNode *make_procedure_signature(
+        std::vector<DeclarationNode *> arguments,
+        bool is_vararg,
+        Node *return_type);
     ReturnNode *make_return(Node *expression);
     TypeCastNode *make_type_cast(Node *type, Node *expression);
     BasicTypeNode *make_basic_type(BasicTypeNode::Kind kind, int64_t size);

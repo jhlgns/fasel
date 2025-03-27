@@ -171,12 +171,16 @@ ProcedureCallNode *Context::make_procedure_call(Node *procedure, std::vector<Nod
     return result;
 }
 
-ProcedureSignatureNode *Context::make_procedure_signature(std::vector<DeclarationNode *> arguments, Node *return_type)
+ProcedureSignatureNode *Context::make_procedure_signature(
+    std::vector<DeclarationNode *> arguments,
+    bool is_vararg,
+    Node *return_type)
 {
     assert(return_type != nullptr);
 
     auto result         = new (*this) ProcedureSignatureNode{};
     result->arguments   = std::move(arguments);
+    result->is_vararg   = is_vararg;
     result->return_type = return_type;
     return result;
 }

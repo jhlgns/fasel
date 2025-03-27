@@ -34,6 +34,7 @@ enum class TokenType
 
     colon,  // :
     comma,  // ,
+    triple_dot,  // ...
 
     parenthesis_open,  // (
     parenthesis_close,  // )
@@ -55,9 +56,9 @@ enum class TokenType
 
 using Tt = TokenType;
 
-inline const char *to_string(TokenType t)
+inline std::string_view to_string(TokenType type)
 {
-    switch (t)
+    switch (type)
     {
         case Tt::asterisk:              return "asterisk";
         case Tt::slash:                 return "slash";
@@ -69,6 +70,7 @@ inline const char *to_string(TokenType t)
         case Tt::bit_xor:               return "bit_xor";
         case Tt::bit_or:                return "bit_or";
         case Tt::comma:                 return "comma";
+        case Tt::triple_dot:            return "triple_dot";
         case Tt::parenthesis_open:      return "parenthesis_open";
         case Tt::parenthesis_close:     return "parenthesis_close";
         case Tt::brace_open:            return "brace_open";
@@ -88,7 +90,7 @@ inline const char *to_string(TokenType t)
         case Tt::less_than:             return "less_than";
         case Tt::identifier:            return "identifier";
         case Tt::keyword:               return "keyword";
-        case Tt::number_literal:     return "numerical_literal";
+        case Tt::number_literal:        return "numerical_literal";
         case Tt::string_literal:        return "string_literal";
         case Tt::single_line_comment:   return "single_line_comment";
         case Tt::multi_line_comment:    return "multi_line_comment";
@@ -158,11 +160,12 @@ struct Token
     {
         switch (this->type)
         {
-            case TokenType::identifier: return std::format("Identifier '{}'", this->text());
-            case TokenType::keyword:    return std::format("Keyword '{}'", this->text());
-            case TokenType::number_literal:
-                return std::format("Literal '{}'", this->text());  // TODO: Shorten string literals
-            default: return ::to_string(this->type);
+            case TokenType::identifier:     return std::format("Identifier '{}'", this->text());
+            case TokenType::keyword:        return std::format("Keyword '{}'", this->text());
+            case TokenType::number_literal: return std::format("Number literal '{}'", this->text());
+            case TokenType::string_literal:
+                return std::format("String literal '{}'", this->text());  // TODO: Shorten string literals
+            default: return std::string{::to_string(this->type)};
         }
     }
 };

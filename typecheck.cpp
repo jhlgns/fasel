@@ -214,7 +214,7 @@ Node *TypeChecker::make_node(AstNode *ast)
 
             auto return_type = this->make_node(signature->return_type);
 
-            return this->ctx.make_procedure_signature(std::move(arguments), return_type);
+            return this->ctx.make_procedure_signature(std::move(arguments), signature->is_vararg, return_type);
         }
 
         case AstKind::return_statement:
@@ -721,7 +721,19 @@ bool TypeChecker::typecheck(Node *node)
 
             auto signature = node_cast<ProcedureSignatureNode, true>(call->procedure->type);
 
-            if (call->arguments.size() != signature->arguments.size())
+            if (signature->is_vararg)
+            {
+                if (call->arguments.size() < signature->arguments.size())
+                {
+                    this->error(
+                        node,
+                        std::format(
+                            "Expected at least {} arguments for variadic procedure call",
+                            signature->arguments.size()));
+                    return false;
+                }
+            }
+            else if (call->arguments.size() != signature->arguments.size())
             {
                 this->error(
                     node,
@@ -736,7 +748,8 @@ bool TypeChecker::typecheck(Node *node)
                     return false;
                 }
 
-                if (types_equal(call->arguments[i]->type, signature->arguments[i]->init_expression->type) == false)
+                if (i < signature->arguments.size() &&
+                    types_equal(call->arguments[i]->type, signature->arguments[i]->init_expression->type) == false)
                 {
                     this->error(
                         node,
@@ -920,6 +933,11 @@ bool types_equal(const Node *lhs, const Node *rhs)
         {
             auto lhs_signature = static_cast<const ProcedureSignatureNode *>(lhs);
             auto rhs_signature = static_cast<const ProcedureSignatureNode *>(rhs);
+
+            if (lhs_signature->is_vararg != rhs_signature->is_vararg)
+            {
+                return false;
+            }
 
             if (types_equal(lhs_signature->return_type, rhs_signature->return_type) == false)
             {

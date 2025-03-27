@@ -127,6 +127,7 @@ struct AstLiteral : AstOfKind<AstKind::literal>
 struct AstProcedureSignature : AstOfKind<AstKind::procedure_signature>
 {
     std::vector<AstDeclaration> arguments{};
+    bool is_vararg{};
     AstNode *return_type{};
 };
 

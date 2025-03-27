@@ -132,7 +132,7 @@ Token Lexer::next_token()
 
     // NOTE: We must look for numerical literals before the simple tokens because otherwise we'd interpret 1.23 as '1', '.', '23'
     auto has_point = *this->cursor.at == '.';
-    if (is_digit(*this->cursor.at) || has_point)
+    if (is_digit(*this->cursor.at) || has_point && this->cursor.at[1] != '.')  // Check that we are not at '...'
     {
         next(this->cursor);
         if (*this->cursor.at == 'x')
@@ -198,6 +198,7 @@ Token Lexer::next_token()
     // clang-format off
     auto simple_tokens = {
         // std::make_tuple(":=", Tt::declaration_assignment),
+        std::make_tuple("...", Tt::triple_dot),
         std::make_tuple("<<", Tt::left_shift),
         std::make_tuple(">>", Tt::right_shift),
         std::make_tuple("&&", Tt::logical_and),

@@ -2,7 +2,7 @@
 // TODO: Make sure global procedure declarations are const
 
 exit := proc(status: i64) void external  // TODO: Implement type casting
-printf := proc(format: *i8) i32 external
+printf := proc(format: *i8, ...) i32 external
 
 main := proc() void {
     i64_var := 123
@@ -12,7 +12,13 @@ main := proc() void {
 
     coerced := i64_var * float_var
 
+    string_constant := "YO"
+
+    printf("=============\n")
     printf("Hakuna matata\n")
+    printf("This is a string literal passed as format arg: '%s'\n", "TEST")
+    printf("This is a string variable passed as format arg: '%s'\n", string_constant)
+    printf("This is an integer: '%d'\n", 1337)
     exit(123)
 
     return

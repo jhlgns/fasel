@@ -47,6 +47,19 @@ int main(int argc, char **argv)
     {
     }
 
+#if 0
+    Lexer lexer{source.get()};
+    for (auto i = 0;; ++i)
+    {
+        auto token = lexer.next_token();
+        std::cout << "Token " << i << ": " << token.to_string() << std::endl;
+        if (token.type == Tt::eof)
+        {
+            break;
+        }
+    }
+#endif
+
     // 1. Parsing
     AstModule module;
     if (parse_module(source.get(), module) == false)

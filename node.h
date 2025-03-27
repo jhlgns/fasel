@@ -164,6 +164,7 @@ struct LiteralNode : NodeOfKind<NodeKind::literal>
 struct ProcedureSignatureNode : NodeOfKind<NodeKind::procedure_signature>
 {
     std::vector<DeclarationNode *> arguments{};
+    bool is_vararg{};
     Node *return_type{};
 };
 

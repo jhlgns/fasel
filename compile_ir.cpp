@@ -140,7 +140,7 @@ struct IrCompiler
                     argument_types.push_back(argument_type);
                 }
 
-                auto function_type = FunctionType::get(return_type, argument_types, false);
+                auto function_type = FunctionType::get(return_type, argument_types, signature->is_vararg);
 
                 return function_type;
             }

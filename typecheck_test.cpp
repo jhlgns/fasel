@@ -8,13 +8,15 @@ using Types = BuiltinTypes;
 // NOTE: For every call to TypeChecker::error() there must be a test case in here
 // TODO: Convert all new XXXNode to ctx.make_xxx
 
+// TODO: Vararg argument passing test
+
 static Context ctx{};
 
 ProcedureNode *make_dummy_proc()
 {
     auto fake_module_root_block = ctx.make_block(nullptr, {});
     return ctx.make_procedure(
-        ctx.make_procedure_signature({}, &Types::voyd),
+        ctx.make_procedure_signature({}, false, &Types::voyd),
         ctx.make_block(fake_module_root_block, {}),
         false);
 }
@@ -363,6 +365,7 @@ TEST_CASE("Procedure calls", "[typecheck]")
             ctx.make_declaration("b", nullptr, ctx.make_float_literal(1.0f)),
             ctx.make_declaration("c", &Types::f64, nullptr),
         },
+        false,
         &Types::voyd);
 
     auto proc = ctx.make_procedure(signature, ctx.make_block(nullptr, {}), false);

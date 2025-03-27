@@ -266,6 +266,13 @@ Parser parse_proc_signature(Parser p, AstProcedureSignature &out_signature)
             break;
         }
 
+        if (p >>= p.quiet().parse_token(Tt::triple_dot))
+        {
+            out_signature.is_vararg = true;
+            require_close           = true;
+            continue;
+        }
+
         AstDeclaration arg{};
         if (!(p >>= parse_decl(p, arg)))
         {
@@ -724,8 +731,6 @@ Parser parse_decl(Parser p, AstDeclaration &out_decl)
         p.error(start, "Declaration without init expression needs a type");
     }
 
-    auto *test = &p;
-
     return p;
 }
 
@@ -733,7 +738,6 @@ Parser parse_module(Parser p, AstModule &out_module)
 {
     auto start = p;
 
-            // p.current_block = &prog->block;
     p.arm("parsing module");
 
     while (true)
