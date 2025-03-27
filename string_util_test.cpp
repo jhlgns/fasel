@@ -1,4 +1,4 @@
-#include "string_util.hpp"
+#include "string_util.h"
 
 #include <catch2/catch_test_macros.hpp>
 

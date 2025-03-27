@@ -1,12 +1,11 @@
-#include "basics.h"
 #include "compile_ir.h"
 #include "jit.h"
 #include "parse.h"
+#include "string_util.h"
 #include "typecheck.h"
 
 #include <cassert>
 #include <cstdarg>
-#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <llvm/IR/Module.h>
@@ -24,28 +23,14 @@ int main(int argc, char **argv)
     auto path = argv[1];
     std::cout << "Compiling file: " << path << std::endl;
 
-    auto f = fopen(path, "r");
-    if (f == nullptr)
+    auto source_file = read_file_as_string(path);
+    if (source_file.has_value())
     {
-        std::cerr << "Could not open file " << path << std::endl;
+        std::cerr << "Failed to read source file" << std::endl;
         return 1;
     }
-    defer
-    {
-        fclose(f);
-    };
 
-    fseek(f, 0, SEEK_END);
-    auto file_size = ftell(f);
-    rewind(f);
-    auto source       = std::make_unique<char[]>(file_size + 1);
-    source[file_size] = 0;
-
-    size_t pos  = 0;
-    size_t read = 0;
-    for (size_t read = 0; (read = fread(&source[pos], 1, file_size - pos, f)); pos += read)
-    {
-    }
+    auto source = std::move(source_file.value());
 
 #if 0
     Lexer lexer{source.get()};
@@ -62,7 +47,7 @@ int main(int argc, char **argv)
 
     // 1. Parsing
     AstModule module;
-    if (parse_module(source.get(), module) == false)
+    if (parse_module(source, module) == false)
     {
         std::cout << "Parsing failed" << std::endl;
         return 1;
@@ -84,11 +69,11 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    for (auto [name, decl] : module_node->block->declarations)
-    {
-        std::cout << "XXX Found global symbol: " << name << " (" << type_to_string(decl->init_expression->type) << ")"
-                  << std::endl;
-    }
+    // for (auto [name, decl] : module_node->block->declarations)
+    // {
+    //     std::cout << "XXX Found global symbol: " << name << " (" << type_to_string(decl->init_expression->type) << ")"
+    //               << std::endl;
+    // }
 
     // 3. Compile to IR
     auto compilation_result = compile_to_ir(module_node);

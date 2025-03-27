@@ -1,6 +1,6 @@
 #include "parse.h"
 
-#include "string_util.hpp"
+#include "string_util.h"
 
 #include <charconv>
 #include <format>
@@ -178,7 +178,7 @@ Parser parse_statement(Parser p, AstNode *&out_statement)
         p.arm("parsing return statement");
 
         AstReturn retyrn{};
-        p >>= parse_expr(p, retyrn.expression);  // Empty return for void
+        p >>= parse_expr(p.quiet(), retyrn.expression);  // Empty return for void
 
         out_statement = new AstReturn{std::move(retyrn)};
         return p;
@@ -290,7 +290,7 @@ Parser parse_proc_signature(Parser p, AstProcedureSignature &out_signature)
     // NOTE: Could be optional?
     if (!(p >>= parse_type(p, out_signature.return_type)))
     {
-        p.error(start, "failed to parse return type");
+        p.error(start, "Failed to parse return type");
         return start;
     }
 

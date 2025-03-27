@@ -85,6 +85,14 @@ struct Jit::Impl
         this->main_jit_dy_lib->addGenerator(
             cantFail(DynamicLibrarySearchGenerator::GetForCurrentProcess(this->data_layout.value().getGlobalPrefix())));
     }
+
+    ~Impl()
+    {
+        if (auto error = this->execution_session->endSession())
+        {
+            FATAL("Failed to end the execution session");
+        }
+    }
 };
 
 Jit::Jit()

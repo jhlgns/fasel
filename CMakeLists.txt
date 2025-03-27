@@ -24,6 +24,7 @@ set(shared_source_files
     lex.cpp
     memory_pool.cpp
     parse.cpp
+    string_util.cpp
     stringify.cpp
     typecheck.cpp
     )
@@ -58,6 +59,11 @@ target_link_libraries(playground PUBLIC ${llvm_libs})
 # target_compile_features(playground PUBLIC cxx_std_20)
 target_compile_options(playground PUBLIC -Werror=switch)
 
+#
+# Integration tests interop
+#
+
+add_library(integration-tests-interop SHARED integration_tests_interop.cpp)
 
 #
 # Tests
@@ -82,4 +88,9 @@ target_include_directories(tests PUBLIC
 target_link_libraries(tests PUBLIC
     Catch2::Catch2WithMain
     ${llvm_libs}
+    integration-tests-interop
     )
+# target_link_options(tests PUBLIC
+#     --export-dynamic
+#     )
+

@@ -1,0 +1,33 @@
+/*
+OUTPUT:
+a = 1
+a = 2
+a = 8
+1234789
+Hakuna matata
+With type
+*/
+
+test_output := proc(format: *i8, ...) void external
+
+main := proc() void {
+    a := 1
+    test_output("a = %d\n", a)
+
+    a = 2
+    test_output("a = %d\n", a)
+
+    a = a * 4
+    test_output("a = %d\n", a)
+
+    test_output("%d\n", 1234789)
+
+    test_output("%s\n", "Hakuna matata")
+
+    string_var: *i8 = "With type"
+    test_output("%s\n", string_var)
+
+    test_output("\0%s\n", string_var)  // Should not output anything
+
+    return
+}

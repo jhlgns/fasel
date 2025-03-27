@@ -1,9 +1,44 @@
-#pragma once
+#include "string_util.h"
+
+#include "basics.h"
 
 #include <cassert>
+#include <cstdio>
+#include <ostream>
+#include <string>
 #include <string_view>
 
-inline std::string_view extract_line(std::string_view source, const char *offset)
+std::optional<std::string> read_file_as_string(std::string_view path)
+{
+    auto f = std::fopen(path.data(), "r");
+    if (f == nullptr)
+    {
+        std::cerr << "Could not open file " << path << std::endl;
+        return std::nullopt;
+    }
+    defer
+    {
+        fclose(f);
+    };
+
+    fseek(f, 0, SEEK_END);
+    auto file_size = ftell(f);
+    rewind(f);
+
+    auto result = std::string{};
+    result.resize(file_size + 1);
+    result[file_size] = 0;
+
+    size_t pos  = 0;
+    size_t read = 0;
+    for (size_t read = 0; (read = fread(&result[pos], 1, file_size - pos, f)); pos += read)
+    {
+    }
+
+    return result;
+}
+
+std::string_view extract_line(std::string_view source, const char *offset)
 {
     if (source.size() == 0)
     {
