@@ -8,6 +8,8 @@ Hakuna matata
 With type
 */
 
+// TODO: %d is wrong format specifier for i64
+
 test_output := proc(format: *i8, ...) void external
 
 main := proc() void {

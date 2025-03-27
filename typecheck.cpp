@@ -160,7 +160,12 @@ Node *TypeChecker::make_node(AstNode *ast)
 
             auto condition  = this->make_node(yf->condition);
             auto then_block = node_cast<BlockNode, true>(this->make_node(&yf->then_block));
-            auto else_block = node_cast<BlockNode, true>(this->make_node(yf->else_block));
+
+            BlockNode *else_block{};
+            if (yf->else_block != nullptr)
+            {
+                else_block = node_cast<BlockNode, true>(this->make_node(yf->else_block));
+            }
 
             return this->ctx.make_if(condition, then_block, else_block);
         }
@@ -707,6 +712,13 @@ bool TypeChecker::typecheck(Node *node)
         case NodeKind::procedure_call:
         {
             auto call = static_cast<ProcedureCallNode *>(node);
+
+            if (call->procedure == this->current_procedure)
+            {
+                // TODO
+                this->error(call, "Recursion is not implemented yet");
+                return false;
+            }
 
             if (typecheck(call->procedure) == false)
             {
