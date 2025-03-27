@@ -19,6 +19,7 @@ endif()
 
 set(shared_source_files
     compile_ir.cpp
+    context.cpp
     jit.cpp
     lex.cpp
     memory_pool.cpp

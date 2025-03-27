@@ -1,0 +1,45 @@
+// Single line comment
+
+/*
+Multiline
+comment
+
+/* Nested comment */
+
+*/
+
+
+fib := proc(n i64) i64 {
+    if n == 0 return 0
+    if n == 1 return 1
+
+    return fib(n - 1) + fib(n - 2)
+}
+
+main := proc() void {
+    // Declaration
+    a := 1 * 2 + 3 / 4  // Default integer type is i64
+
+    // With explicit type
+    b: f32 = fib(30)
+
+    // With explicit type and without init expression
+    c: i32
+
+     // Type notation similar to Golang/C
+    d: *i32 = &c
+
+    // Type casting
+    casted := 12.34 to i64
+
+    // Array of pointer to array of 2 elements of a procedure pointer type
+    // (Imagine doing this in C!)
+    array: []*[2]proc(a: i64, f: f32)
+
+    while !done {
+        a <<= 1
+
+        if a > 128 break
+    }
+}
+

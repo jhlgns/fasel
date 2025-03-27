@@ -5,9 +5,9 @@
 
 struct MemoryPool
 {
-    size_t capacity;
-    char *memory_start;
-    char *cursor;
+    size_t capacity{};
+    char *memory_start{};
+    char *cursor{};
 
     explicit MemoryPool(size_t capacity);
 

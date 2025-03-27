@@ -28,6 +28,7 @@ struct IrCompiler
     LLVMContext &llvm_context;
     std::unique_ptr<Module> module;
     Function *current_function{};
+    BlockNode *current_block{};
     IRBuilder<llvm::NoFolder> ir;
     // IRBuilder<> ir;
 
@@ -103,7 +104,7 @@ struct IrCompiler
 
                 auto element_type = this->convert_type(array->element_type);
 
-                auto length_literal = node_cast<LiteralNode>(array->length_expression);
+                auto length_literal = node_cast<LiteralNode>(array->length);
                 if (length_literal == nullptr)
                 {
                     TODO;
@@ -257,6 +258,13 @@ struct IrCompiler
 
     Value *generate_code(BlockNode *block)
     {
+        auto old_block      = this->current_block;
+        this->current_block = block;
+        defer
+        {
+            this->current_block = old_block;
+        };
+
         for (auto statement : block->statements)
         {
             this->generate_code(statement);
@@ -270,7 +278,7 @@ struct IrCompiler
         if (decl->init_expression->kind == NodeKind::procedure)
         {
             // TODO: Transform local procedure declarations to global ones
-            assert(decl->containing_block->is_global());
+            assert(this->current_block->is_global());
             assert(this->current_function == nullptr);
 
             auto procedure = node_cast<ProcedureNode, true>(decl->init_expression);
@@ -305,7 +313,7 @@ struct IrCompiler
         }
 
          // TODO: There are no global variables yet and they are not on the roadmap
-        ENSURE(decl->containing_block->is_global() == false);
+        ENSURE(this->current_block->is_global() == false);
 
         // Declaration assignment to init expresion
         auto value = this->generate_code(decl->init_expression);
@@ -317,7 +325,7 @@ struct IrCompiler
     Value *generate_code(IdentifierNode *ident, bool is_store = false)
     {
         auto type = this->convert_type(ident->type);
-        auto decl = ident->containing_block->find_declaration(ident->identifier);
+        auto decl = this->current_block->find_declaration(ident->identifier);
 
         assert(decl->named_value != nullptr);
 
@@ -388,7 +396,7 @@ struct IrCompiler
     {
         assert(call->procedure->kind == NodeKind::identifier);  // TODO: Function pointer calling
         auto ident     = static_cast<IdentifierNode *>(call->procedure);
-        auto proc_decl = call->containing_block->find_declaration(ident->identifier);
+        auto proc_decl = this->current_block->find_declaration(ident->identifier);
         assert(
             proc_decl->named_value !=
             nullptr);  // TODO: Implement on-demand node compilation with something like ensure_compiled(Node *node)
@@ -504,17 +512,6 @@ struct IrCompiler
         }
     }
 
-    Value *generate_code(ModuleNode *module)
-    {
-        for (auto decl : module->block->statements)
-        {
-            assert(decl->kind == NodeKind::declaration);
-            this->generate_code(decl);
-        }
-
-        return nullptr;
-    }
-
     Value *generate_code(Node *node, bool is_store = false)
     {
         switch (node->kind)
@@ -525,7 +522,7 @@ struct IrCompiler
             case NodeKind::identifier:       return this->generate_code(static_cast<IdentifierNode *>(node), is_store);
             case NodeKind::if_statement:     return this->generate_code(static_cast<IfNode *>(node));
             case NodeKind::literal:          return this->generate_code(static_cast<LiteralNode *>(node));
-            case NodeKind::module:           return this->generate_code(static_cast<ModuleNode *>(node));
+            case NodeKind::module:           return this->generate_code(static_cast<ModuleNode *>(node)->block);
             case NodeKind::procedure:        return this->generate_code(static_cast<ProcedureNode *>(node));
             case NodeKind::procedure_call:   return this->generate_code(static_cast<ProcedureCallNode *>(node));
             case NodeKind::return_statement: return this->generate_code(static_cast<ReturnNode *>(node));

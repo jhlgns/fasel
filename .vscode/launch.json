@@ -19,7 +19,7 @@
             "preLaunchTask": "build-debug",
             "name": "Debug tests",
             "program": "${workspaceFolder}/build-debug/tests",
-            "args": ["[parse],[typecheck]"],
+            // "args": ["[parse],[typecheck]"],
             "cwd": "${workspaceFolder}/build-debug"
         },
         {

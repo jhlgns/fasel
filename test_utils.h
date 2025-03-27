@@ -63,6 +63,7 @@ inline AstLiteral *make_float_literal(float value)
 {
     auto result = new AstLiteral{};
     result->value.emplace<float>(value);
+    result->suffix = 'f';
     return result;
 }
 

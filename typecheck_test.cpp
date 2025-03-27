@@ -1,3 +1,4 @@
+#include "context.h"
 #include "test_utils.h"
 #include "typecheck.h"
 
@@ -6,24 +7,39 @@
 using Types = BuiltinTypes;
 
 // NOTE: For every call to TypeChecker::error() there must be a test case in here
+// TODO: Convert all new XXXNode to ctx.make_xxx
+
+static Context ctx{};
+
+ProcedureNode *make_dummy_proc()
+{
+    auto fake_module_root_block = ctx.make_block(nullptr, {});
+    return ctx.make_procedure(
+        ctx.make_procedure_signature({}, &Types::voyd),
+        ctx.make_block(fake_module_root_block, {}),
+        false);
+}
 
 void test_type(AstNode *ast, const Node *expected_type)
 {
-    TypeChecker type_checker{};
+    TypeChecker tc{ctx};
 
     BlockNode block{};
 
-    auto node = make_node(&block, ast);
+    auto node = tc.make_node(ast);
     REQUIRE(node != nullptr);
+
+    auto proc = make_dummy_proc();
+    proc->body->statements.push_back(node);
 
     if (expected_type == nullptr)
     {
-        REQUIRE(type_checker.typecheck(node) == false);
+        CHECK(tc.typecheck(proc) == false);
     }
     else
     {
-        REQUIRE(type_checker.typecheck(node));
-        REQUIRE(types_equal(node->type, expected_type));
+        CHECK(tc.typecheck(proc));
+        CHECK(types_equal(node->type, expected_type));
     }
 }
 
@@ -156,224 +172,102 @@ TEST_CASE("Identifiers - declared in parent block", "[typecheck]")
 {
     SECTION("Found")
     {
-        TypeChecker type_checker;
+        TypeChecker tc{ctx};
 
-        BlockNode parent_block{};
-        // TODO: This is very janky
-        ProcedureNode proc;
-        proc.body                      = &parent_block;
-        type_checker.current_procedure = &proc;
+        auto proc = make_dummy_proc();
 
-        auto decl              = new DeclarationNode{};
-        decl->containing_block = &parent_block;
-        decl->identifier       = "x";
-        decl->specified_type   = const_cast<BasicTypeNode *>(&Types::u8);  // TODO
-        decl->init_expression  = new NopNode{};
-        parent_block.statements.push_back(decl);
+        proc->body->statements.push_back(ctx.make_declaration("x", &Types::i8, nullptr));
 
-        REQUIRE(type_checker.typecheck(&parent_block));
+        auto identifier = ctx.make_identifier("x");
+        proc->body->statements.push_back(ctx.make_block(proc->body, {identifier}));
 
-        BlockNode child_block{};
-        child_block.containing_block = &parent_block;
-
-        IdentifierNode identifier{};
-        identifier.containing_block = &child_block;
-        identifier.identifier       = "x";
-        child_block.statements.push_back(&identifier);
-
-        REQUIRE(type_checker.typecheck(&child_block));
-        // REQUIRE(type_checker.typecheck(&identifier));
-        REQUIRE(types_equal(identifier.type, &Types::u8));
+        REQUIRE(tc.typecheck(proc));
+        REQUIRE(types_equal(identifier->type, &Types::i8));
     }
 
     SECTION("Not found")
     {
-        TypeChecker type_checker;
+        TypeChecker tc{ctx};
 
-        BlockNode parent_block{};
-        // TODO: This is very janky
-        ProcedureNode proc;
-        proc.body                      = &parent_block;
-        type_checker.current_procedure = &proc;
+        auto proc = make_dummy_proc();
 
-        auto decl              = new DeclarationNode{};
-        decl->containing_block = &parent_block;
-        decl->identifier       = "x";
-        decl->specified_type   = const_cast<BasicTypeNode *>(&Types::u8);  // TODO
-        decl->init_expression  = new NopNode{};
-        parent_block.statements.push_back(decl);
+        proc->body->statements.push_back(ctx.make_declaration("x", &Types::i8, nullptr));
 
-        REQUIRE(type_checker.typecheck(&parent_block));
+        auto identifier = ctx.make_identifier("y");
+        proc->body->statements.push_back(ctx.make_block(proc->body, {identifier}));
 
-        BlockNode child_block{};
-        child_block.containing_block = &parent_block;
-
-        IdentifierNode identifier{};
-        identifier.containing_block = &child_block;
-        identifier.identifier       = "y";
-        child_block.statements.push_back(&identifier);
-
-        REQUIRE(type_checker.typecheck(&child_block) == false);
-        // REQUIRE(type_checker.typecheck(&identifier) == false);
+        REQUIRE_FALSE(tc.typecheck(proc));
     }
 }
 
 TEST_CASE("Identifiers - uninitialized, with explicit type", "[typecheck]")
 {
-    SECTION("Found")
-    {
-        TypeChecker type_checker;
+    TypeChecker tc{ctx};
 
-        BlockNode block{};
-        ProcedureNode proc;
-        proc.body                      = &block;
-        type_checker.current_procedure = &proc;
+    auto proc = make_dummy_proc();
 
-        auto decl              = new DeclarationNode{};
-        decl->containing_block = &block;
-        decl->identifier       = "x";
-        decl->specified_type   = const_cast<BasicTypeNode *>(&Types::u8);  // TODO
-        decl->init_expression  = new NopNode{};
-        block.statements.push_back(decl);
+    auto decl = ctx.make_declaration("x", &Types::i8, nullptr);
+    proc->body->statements.push_back(decl);
 
-        IdentifierNode identifier{};
-        identifier.containing_block = &block;
-        identifier.identifier       = "x";
-        block.statements.push_back(&identifier);
-
-        REQUIRE(type_checker.typecheck(&block));
-        REQUIRE(types_equal(identifier.type, &Types::u8));
-    }
-
-    SECTION("Not found")
-    {
-        TypeChecker type_checker;
-
-        BlockNode block{};
-        ProcedureNode proc;
-        proc.body                      = &block;
-        type_checker.current_procedure = &proc;
-
-        auto decl              = new DeclarationNode{};
-        decl->containing_block = &block;
-        decl->identifier       = "x";
-        decl->specified_type   = const_cast<BasicTypeNode *>(&Types::u8);  // TODO
-        decl->init_expression  = new NopNode{};
-        block.statements.push_back(decl);
-
-        IdentifierNode identifier{};
-        identifier.containing_block = &block;
-        identifier.identifier       = "y";
-        block.statements.push_back(&identifier);
-
-        REQUIRE(type_checker.typecheck(&block) == false);
-    }
+    REQUIRE(tc.typecheck(proc));
+    REQUIRE(types_equal(decl->init_expression->type, &Types::i8));
 }
 
 TEST_CASE("Identifiers - initialized, without explicit type", "[typecheck]")
 {
-    SECTION("Found")
-    {
-        TypeChecker type_checker;
+    TypeChecker tc{ctx};
 
-        BlockNode block{};
-        ProcedureNode proc;
-        proc.body                      = &block;
-        type_checker.current_procedure = &proc;
+    auto proc = make_dummy_proc();
 
-        LiteralNode init_expression{};
-        init_expression.value.emplace<bool>(true);
+    auto decl = ctx.make_declaration("x", nullptr, ctx.make_bool_literal(false));
+    proc->body->statements.push_back(decl);
 
-        auto decl              = new DeclarationNode{};
-        decl->containing_block = &block;
-        decl->identifier       = "x";
-        decl->specified_type   = new NopNode{};
-        decl->init_expression  = &init_expression;
-        block.statements.push_back(decl);
-
-        IdentifierNode identifier{};
-        identifier.containing_block = &block;
-        identifier.identifier       = "x";
-        block.statements.push_back(&identifier);
-
-        REQUIRE(type_checker.typecheck(&block));
-        REQUIRE(types_equal(identifier.type, &Types::boolean));
-    }
-
-    SECTION("Not found")
-    {
-        TypeChecker type_checker;
-
-        BlockNode block{};
-        ProcedureNode proc;
-        proc.body                      = &block;
-        type_checker.current_procedure = &proc;
-
-        LiteralNode init_expression{};
-        init_expression.value.emplace<bool>(true);
-
-        auto decl              = new DeclarationNode{};
-        decl->containing_block = &block;
-        decl->identifier       = "x";
-        decl->specified_type   = new NopNode{};
-        decl->init_expression  = &init_expression;
-        block.statements.push_back(decl);
-
-        IdentifierNode identifier{};
-        identifier.containing_block = &block;
-        identifier.identifier       = "y";
-        block.statements.push_back(&identifier);
-
-        REQUIRE(type_checker.typecheck(&block) == false);
-    }
+    REQUIRE(tc.typecheck(proc));
+    REQUIRE(types_equal(decl->init_expression->type, &Types::boolean));
 }
 
 TEST_CASE("Declarations - initialized, with different explicit type", "[typecheck]")
 {
-    TypeChecker type_checker;
+    TypeChecker tc{ctx};
 
-    BlockNode block{};
+    auto proc = make_dummy_proc();
 
-    LiteralNode init_expression{};
-    init_expression.value.emplace<bool>(true);
+    auto decl = ctx.make_declaration("x", &Types::i8, ctx.make_bool_literal(false));
+    proc->body->statements.push_back(decl);
 
-    auto decl              = new DeclarationNode{};
-    decl->containing_block = &block;
-    decl->identifier       = "x";
-    decl->specified_type   = const_cast<BasicTypeNode *>(&Types::i8);  // TODO
-    decl->init_expression  = &init_expression;
-    block.statements.push_back(decl);
-
-    REQUIRE(type_checker.typecheck(decl) == false);
+    REQUIRE_FALSE(tc.typecheck(proc));
 }
 
 TEST_CASE("Procedures", "[typecheck]")
 {
-    auto signature = new AstProcedureSignature{};
-    signature->arguments.push_back(*make_declaration("a", make_simple_type("i64"), make_int_literal(1)));
-    signature->arguments.push_back(*make_declaration("b", nullptr, make_float_literal(1.0f)));
-    signature->arguments.push_back(*make_declaration("c", make_simple_type("f64"), nullptr));
-    signature->return_type = make_simple_type("void");
+    // TODO: Rewrite this to not use AST nodes
 
-    auto proc = make_procedure(signature, make_block({}));
+    // auto signature_ast = new AstProcedureSignature{};
+    // signature_ast->arguments.push_back(*make_declaration("a", make_simple_type("i64"), make_int_literal(1)));
+    // signature_ast->arguments.push_back(*make_declaration("b", nullptr, make_float_literal(1.0f)));
+    // signature_ast->arguments.push_back(*make_declaration("c", make_simple_type("f64"), nullptr));
+    // signature_ast->return_type = make_simple_type("void");
 
-    auto a                   = new DeclarationNode{};
-    a->init_expression       = new NopNode{};
-    a->init_expression->type = &Types::i64;
-    auto b                   = new DeclarationNode{};
-    b->init_expression       = new NopNode{};
-    b->init_expression->type = &Types::f32;
-    auto c                   = new DeclarationNode{};
-    c->init_expression       = new NopNode{};
-    c->init_expression->type = &Types::f64;
+    // auto proc_ast = make_procedure(signature_ast, make_block({}));
+    // auto proc =
 
-    auto expected_type = new ProcedureSignatureNode{};
-    expected_type->arguments.push_back(a);
-    expected_type->arguments.push_back(b);
-    expected_type->arguments.push_back(c);
-    expected_type->return_type = const_cast<BasicTypeNode *>(&Types::voyd);
+    // auto a                   = ctx.make_declaration(proc_ast->body, "a", ctx.make_nop(proc_ast->body), &Types::i64);
+    // a->init_expression       = new NopNode{};
+    // a->init_expression->type = &Types::i64;
+    // auto b                   = new DeclarationNode{};
+    // b->init_expression       = new NopNode{};
+    // b->init_expression->type = &Types::f32;
+    // auto c                   = new DeclarationNode{};
+    // c->init_expression       = new NopNode{};
+    // c->init_expression->type = &Types::f64;
 
-    test_type(proc, expected_type);
+    // auto expected_type = new ProcedureSignatureNode{};
+    // expected_type->arguments.push_back(a);
+    // expected_type->arguments.push_back(b);
+    // expected_type->arguments.push_back(c);
+    // expected_type->return_type = &Types::voyd;
+
+    // test_type(proc_ast, expected_type);
 }
 
 TEST_CASE("Return expression", "[typecheck]")

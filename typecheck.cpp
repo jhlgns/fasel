@@ -67,15 +67,15 @@ DeclarationNode *BlockNode::find_declaration(std::string_view name, bool recurse
         return it->second;
     }
 
-    if (recurse && this->containing_block != nullptr)
+    if (recurse && this->parent_block != nullptr)
     {
-        return this->containing_block->find_declaration(name);
+        return this->parent_block->find_declaration(name);
     }
 
     return nullptr;
 }
 
-Node *make_node_internal(BlockNode *containing_block, AstNode *ast)
+Node *TypeChecker::make_node(AstNode *ast)
 {
     switch (ast->kind)
     {
@@ -83,35 +83,37 @@ Node *make_node_internal(BlockNode *containing_block, AstNode *ast)
         {
             auto bin_op = static_cast<AstBinaryOperator *>(ast);
 
-            auto lhs = make_node(containing_block, bin_op->lhs);
+            auto lhs = this->make_node(bin_op->lhs);
             if (lhs == nullptr)
             {
                 return nullptr;
             }
 
-            auto rhs = make_node(containing_block, bin_op->rhs);
+            auto rhs = this->make_node(bin_op->rhs);
             if (rhs == nullptr)
             {
                 return nullptr;
             }
 
-            auto result           = new BinaryOperatorNode{};
-            result->lhs           = lhs;
-            result->rhs           = rhs;
-            result->operator_kind = bin_op->type;
-
-            return result;
+            return this->ctx.make_binary_operator(bin_op->type, lhs, rhs);
         }
 
         case AstKind::block:
         {
             auto block = static_cast<AstBlock *>(ast);
 
-            auto result = new BlockNode{};
+            auto result = this->ctx.make_block(this->current_block, {});
+
+            auto old_block      = this->current_block;
+            this->current_block = result;
+            defer
+            {
+                this->current_block = old_block;
+            };
 
             for (auto statement : block->statements)
             {
-                auto statement_node = make_node(result, statement);
+                auto statement_node = this->make_node(statement);
                 result->statements.push_back(statement_node);
             }
 
@@ -122,142 +124,123 @@ Node *make_node_internal(BlockNode *containing_block, AstNode *ast)
         {
             auto decl = static_cast<AstDeclaration *>(ast);
 
-            auto result        = new DeclarationNode{};
-            result->identifier = decl->identifier.text();
+            Node *specified_type{};
+            Node *init_expr{};
 
             if (decl->type == nullptr)
             {
-                auto nop               = new NopNode{};
-                nop->containing_block  = containing_block;
-                result->specified_type = nop;
+                specified_type = this->ctx.make_nop();
             }
             else
             {
-                result->specified_type = make_node(containing_block, decl->type);
+                specified_type = this->make_node(decl->type);
             }
 
             if (decl->init_expression == nullptr)
             {
-                auto nop                = new NopNode{};
-                nop->containing_block   = containing_block;
-                result->init_expression = nop;
+                init_expr = this->ctx.make_nop();
             }
             else
             {
-                result->init_expression = make_node(containing_block, decl->init_expression);
+                init_expr = this->make_node(decl->init_expression);
             }
 
-            return result;
+            return this->ctx.make_declaration(decl->identifier.text(), specified_type, init_expr);
         }
 
         case AstKind::identifier:
         {
             auto ident = static_cast<AstIdentifier *>(ast);
-
-            auto result        = new IdentifierNode{};
-            result->identifier = ident->identifier.text();
-
-            return result;
+            return this->ctx.make_identifier(ident->identifier.text());
         }
 
         case AstKind::if_statement:
         {
             auto yf = static_cast<AstIf *>(ast);
 
-            auto result        = new IfNode{};
-            result->condition  = make_node(containing_block, yf->condition);
-            result->then_block = node_cast<BlockNode, true>(make_node(containing_block, &yf->then_block));
-            result->else_block = node_cast<BlockNode, true>(make_node(containing_block, yf->else_block));
+            auto condition  = this->make_node(yf->condition);
+            auto then_block = node_cast<BlockNode, true>(this->make_node(&yf->then_block));
+            auto else_block = node_cast<BlockNode, true>(this->make_node(yf->else_block));
 
-            return result;
+            return this->ctx.make_if(condition, then_block, else_block);
         }
 
         case AstKind::literal:
         {
             auto literal = static_cast<AstLiteral *>(ast);
-
-            auto result    = new LiteralNode{};
-            result->value  = literal->value;
-            result->suffix = literal->suffix;
-
-            return result;
+            return this->ctx.make_literal(literal->value, literal->suffix);
         }
 
         case AstKind::procedure:
         {
             auto proc = static_cast<AstProcedure *>(ast);
 
-            auto result       = new ProcedureNode{};
-            result->signature = node_cast<ProcedureSignatureNode, true>(make_node(containing_block, &proc->signature));
-            assert(result->signature != nullptr);
+            auto signature = node_cast<ProcedureSignatureNode, true>(this->make_node(&proc->signature));
 
-            result->is_external = proc->is_external;
-
+            BlockNode *body{};
             if (proc->is_external == false)
             {
-                result->body = node_cast<BlockNode, true>(make_node(containing_block, &proc->body));
+                body = node_cast<BlockNode, true>(this->make_node(&proc->body));
             }
 
-            return result;
+            return this->ctx.make_procedure(signature, body, proc->is_external);
         }
 
         case AstKind::procedure_call:
         {
             auto call = static_cast<AstProcedureCall *>(ast);
 
-            auto result       = new ProcedureCallNode{};
-            result->procedure = make_node(containing_block, call->procedure);
+            auto procedure = this->make_node(call->procedure);
+            std::vector<Node *> arguments{};
 
             for (auto argument : call->arguments)
             {
-                result->arguments.push_back(make_node(containing_block, argument));
+                arguments.push_back(this->make_node(argument));
             }
 
-            return result;
+            return this->ctx.make_procedure_call(procedure, std::move(arguments));
         }
 
         case AstKind::procedure_signature:
         {
             auto signature = static_cast<AstProcedureSignature *>(ast);
-
-            auto result = new ProcedureSignatureNode{};
+            std::vector<DeclarationNode *> arguments{};
 
             for (auto argument : signature->arguments)
             {
-                auto argument_node = node_cast<DeclarationNode, true>(make_node(containing_block, &argument));
-                result->arguments.push_back(argument_node);
+                auto argument_node = node_cast<DeclarationNode, true>(this->make_node(&argument));
+                arguments.push_back(argument_node);
             }
 
-            result->return_type = make_node(containing_block, signature->return_type);
+            auto return_type = this->make_node(signature->return_type);
 
-            return result;
+            return this->ctx.make_procedure_signature(std::move(arguments), return_type);
         }
 
         case AstKind::return_statement:
         {
             auto retyrn = static_cast<AstReturn *>(ast);
 
-            auto result = new ReturnNode{};
+            Node *expression{};
             if (retyrn->expression == nullptr)
             {
-                result->expression = new NopNode{};
+                expression = this->ctx.make_nop();
             }
             else
             {
-                result->expression = make_node(containing_block, retyrn->expression);
+                expression = this->make_node(retyrn->expression);
             }
 
-            return result;
+            return this->ctx.make_return(expression);
         }
 
         case AstKind::module:
         {
             auto module = static_cast<AstModule *>(ast);
 
-            auto result   = new ModuleNode{};
-            result->block = node_cast<BlockNode, true>(make_node(nullptr, &module->block));
+            auto block = node_cast<BlockNode, true>(this->make_node(&module->block));
 
-            return result;
+            return this->ctx.make_module(block);
         }
 
         case AstKind::type_identifier:
@@ -269,7 +252,7 @@ Node *make_node_internal(BlockNode *containing_block, AstNode *ast)
             {
                 if (type_ident->identifier.text() == name)
                 {
-                    return const_cast<Node *>(type);
+                    return type;
                 }
             }
 
@@ -284,35 +267,23 @@ Node *make_node_internal(BlockNode *containing_block, AstNode *ast)
         {
             auto pointer = static_cast<AstPointerType *>(ast);
 
-            auto result         = new PointerTypeNode{};
-            result->target_type = make_node(containing_block, pointer->target_type);
+            auto target_type = this->make_node(pointer->target_type);
 
-            return result;
+            return this->ctx.make_pointer_type(target_type);
         }
 
         case AstKind::array_type:
         {
             auto array = static_cast<AstArrayType *>(ast);
 
-            auto result               = new ArrayTypeNode{};
-            result->length_expression = make_node(containing_block, array->length_expression);
-            result->element_type      = make_node(containing_block, array->element_type);
+            auto length       = this->make_node(array->length_expression);
+            auto element_type = this->make_node(array->element_type);
 
-            return result;
+            return this->ctx.make_array_type(length, element_type);
         }
     }
 
     UNREACHED
-}
-
-Node *make_node(BlockNode *containing_block, AstNode *ast)
-{
-    assert(ast != nullptr);
-
-    auto result              = make_node_internal(containing_block, ast);
-    result->containing_block = containing_block;
-
-    return result;
 }
 
 bool TypeChecker::typecheck(Node *node)
@@ -384,9 +355,17 @@ bool TypeChecker::typecheck(Node *node)
 
                     assert(max_size == 1 || max_size == 2 || max_size == 4 || max_size == 8);
 
-                    auto type = new BasicTypeNode{
-                        is_float ? BasicTypeNode::Kind::floatingpoint : lhs_basic->type_kind,
-                        max_size};
+                    auto type_kind = is_float ? BasicTypeNode::Kind::floatingpoint : lhs_basic->type_kind;
+                    BasicTypeNode *type{};
+                    for (auto [builtin_type, name] : BuiltinTypes::type_names)
+                    {
+                        if (builtin_type->type_kind == type_kind && builtin_type->size == max_size)
+                        {
+                            type = builtin_type;
+                        }
+                    }
+
+                    ENSURE(type != nullptr);
 
                     bin_op->type = type;
 
@@ -394,20 +373,12 @@ bool TypeChecker::typecheck(Node *node)
                     {
                         if (types_equal(type, lhs_basic) == false)
                         {
-                            auto cast              = new TypeCastNode{};
-                            cast->containing_block = bin_op->containing_block;
-                            cast->expression       = bin_op->lhs;
-                            cast->type             = type;
-                            bin_op->lhs            = cast;
+                            bin_op->lhs = this->ctx.make_type_cast(type, bin_op->lhs);
                         }
 
                         if (types_equal(type, rhs_basic) == false)
                         {
-                            auto cast              = new TypeCastNode{};
-                            cast->containing_block = bin_op->containing_block;
-                            cast->expression       = bin_op->rhs;
-                            cast->type             = type;
-                            bin_op->rhs            = cast;
+                            bin_op->rhs = this->ctx.make_type_cast(type, bin_op->rhs);
                         }
                     }
 
@@ -521,6 +492,13 @@ bool TypeChecker::typecheck(Node *node)
 
             auto block = static_cast<BlockNode *>(node);
 
+            auto old_block      = this->current_block;
+            this->current_block = block;
+            defer
+            {
+                this->current_block = old_block;
+            };
+
             for (auto statement : block->statements)
             {
                 if (this->current_procedure != nullptr)
@@ -542,26 +520,36 @@ bool TypeChecker::typecheck(Node *node)
         {
             auto decl = static_cast<DeclarationNode *>(node);
 
-            auto old_decl             = this->current_declaration;
-            this->current_declaration = decl;
-            defer
-            {
-                this->current_declaration = old_decl;
-            };
+            assert(this->current_block != nullptr);
 
-            if (decl->containing_block->find_declaration(decl->identifier, false) != nullptr)
+            if (this->current_block->find_declaration(decl->identifier, false) != nullptr)
             {
                 this->error(decl, std::format("Duplicate declaration of '{}'", decl->identifier));
                 return false;
             }
 
             auto [it, ok] =
-                decl->containing_block->declarations.insert(std::make_pair(std::string{decl->identifier}, decl));
+                this->current_block->declarations.insert(std::make_pair(std::string{decl->identifier}, decl));
             assert(ok);
 
             if (typecheck(decl->init_expression) == false)
             {
                 return false;
+            }
+
+            if (decl->identifier == "main" && this->current_block->is_global())
+            {
+                auto proc = node_cast<ProcedureNode>(decl->init_expression);
+                if (proc == nullptr || types_equal(&BuiltinTypes::main_signature, proc->signature) == false)
+                {
+                    this->error(
+                        proc,
+                        std::format(
+                            "A global declaration called 'main' must be of type {}, received {}",
+                            type_to_string(&BuiltinTypes::main_signature),
+                            type_to_string(decl->init_expression->type)));
+                    return false;
+                }
             }
 
             if (decl->specified_type->kind != NodeKind::nop)
@@ -590,7 +578,7 @@ bool TypeChecker::typecheck(Node *node)
         case NodeKind::identifier:
         {
             auto ident = static_cast<IdentifierNode *>(node);
-            auto decl  = ident->containing_block->find_declaration(ident->identifier);
+            auto decl  = this->current_block->find_declaration(ident->identifier);
 
             if (decl == nullptr)
             {
@@ -684,34 +672,20 @@ bool TypeChecker::typecheck(Node *node)
         {
             auto proc = static_cast<ProcedureNode *>(node);
 
+            auto old_procedure      = this->current_procedure;
+            this->current_procedure = proc;
+            defer
+            {
+                this->current_procedure = old_procedure;
+            };
+
             if (typecheck(proc->signature) == false)
             {
                 return false;
             }
 
-            if (this->current_declaration->identifier == "main")
-            {
-                if (types_equal(&BuiltinTypes::main_signature, proc->signature) == false)
-                {
-                    this->error(
-                        proc,
-                        std::format(
-                            "The main procedure must be of type {}, received {}",
-                            type_to_string(&BuiltinTypes::main_signature),
-                            type_to_string(proc->signature)));
-                    return false;
-                }
-            }
-
             if (proc->is_external == false)
             {
-                auto old_procedure      = this->current_procedure;
-                this->current_procedure = proc;
-                defer
-                {
-                    this->current_procedure = old_procedure;
-                };
-
                 if (typecheck(proc->body) == false)
                 {
                     return false;
@@ -872,13 +846,8 @@ bool TypeChecker::typecheck(Node *node)
 
 void TypeChecker::error(const Node *node, std::string_view message)
 {
-    if (this->print_errors == false)
-    {
-        return;
-    }
-
     // TODO: Print a string representation of the node for context
-    std::cout << "Type error: " << message << std::endl;
+    this->errors.push_back(std::format("Type error: {}", message));
 }
 
 
@@ -920,8 +889,8 @@ bool types_equal(const Node *lhs, const Node *rhs)
             }
 
             // TODO
-            auto lhs_length_literal = node_cast<LiteralNode>(lhs_array->length_expression);
-            auto rhs_length_literal = node_cast<LiteralNode>(rhs_array->length_expression);
+            auto lhs_length_literal = node_cast<LiteralNode>(lhs_array->length);
+            auto rhs_length_literal = node_cast<LiteralNode>(rhs_array->length);
 
             if (lhs_length_literal == nullptr || rhs_length_literal == nullptr)
             {
@@ -1043,28 +1012,28 @@ std::string type_to_string(const Node *type /*, BlockNode *block */)
     }
 }
 
-const BasicTypeNode BuiltinTypes::voyd    = BasicTypeNode{BasicTypeNode::Kind::voyd, -1};
-const BasicTypeNode BuiltinTypes::i64     = BasicTypeNode{BasicTypeNode::Kind::signed_integer, 8};
-const BasicTypeNode BuiltinTypes::i32     = BasicTypeNode{BasicTypeNode::Kind::signed_integer, 4};
-const BasicTypeNode BuiltinTypes::i16     = BasicTypeNode{BasicTypeNode::Kind::signed_integer, 2};
-const BasicTypeNode BuiltinTypes::i8      = BasicTypeNode{BasicTypeNode::Kind::signed_integer, 1};
-const BasicTypeNode BuiltinTypes::u64     = BasicTypeNode{BasicTypeNode::Kind::unsigned_integer, 8};
-const BasicTypeNode BuiltinTypes::u32     = BasicTypeNode{BasicTypeNode::Kind::unsigned_integer, 4};
-const BasicTypeNode BuiltinTypes::u16     = BasicTypeNode{BasicTypeNode::Kind::unsigned_integer, 2};
-const BasicTypeNode BuiltinTypes::u8      = BasicTypeNode{BasicTypeNode::Kind::unsigned_integer, 1};
-const BasicTypeNode BuiltinTypes::f32     = BasicTypeNode{BasicTypeNode::Kind::floatingpoint, 4};
-const BasicTypeNode BuiltinTypes::f64     = BasicTypeNode{BasicTypeNode::Kind::floatingpoint, 8};
-const BasicTypeNode BuiltinTypes::boolean = BasicTypeNode{BasicTypeNode::Kind::boolean, 1};
-const BasicTypeNode BuiltinTypes::type    = BasicTypeNode{BasicTypeNode::Kind::type, -1};
+BasicTypeNode BuiltinTypes::voyd    = BasicTypeNode{BasicTypeNode::Kind::voyd, -1};
+BasicTypeNode BuiltinTypes::i64     = BasicTypeNode{BasicTypeNode::Kind::signed_integer, 8};
+BasicTypeNode BuiltinTypes::i32     = BasicTypeNode{BasicTypeNode::Kind::signed_integer, 4};
+BasicTypeNode BuiltinTypes::i16     = BasicTypeNode{BasicTypeNode::Kind::signed_integer, 2};
+BasicTypeNode BuiltinTypes::i8      = BasicTypeNode{BasicTypeNode::Kind::signed_integer, 1};
+BasicTypeNode BuiltinTypes::u64     = BasicTypeNode{BasicTypeNode::Kind::unsigned_integer, 8};
+BasicTypeNode BuiltinTypes::u32     = BasicTypeNode{BasicTypeNode::Kind::unsigned_integer, 4};
+BasicTypeNode BuiltinTypes::u16     = BasicTypeNode{BasicTypeNode::Kind::unsigned_integer, 2};
+BasicTypeNode BuiltinTypes::u8      = BasicTypeNode{BasicTypeNode::Kind::unsigned_integer, 1};
+BasicTypeNode BuiltinTypes::f32     = BasicTypeNode{BasicTypeNode::Kind::floatingpoint, 4};
+BasicTypeNode BuiltinTypes::f64     = BasicTypeNode{BasicTypeNode::Kind::floatingpoint, 8};
+BasicTypeNode BuiltinTypes::boolean = BasicTypeNode{BasicTypeNode::Kind::boolean, 1};
+BasicTypeNode BuiltinTypes::type    = BasicTypeNode{BasicTypeNode::Kind::type, -1};
 
-const ProcedureSignatureNode BuiltinTypes::main_signature = []
+ProcedureSignatureNode BuiltinTypes::main_signature = []
 {
     ProcedureSignatureNode result;
-    result.return_type = const_cast<BasicTypeNode *>(&BuiltinTypes::voyd);
+    result.return_type = &BuiltinTypes::voyd;
     return result;
 }();
 
-const std::vector<std::tuple<const Node *, std::string_view>> BuiltinTypes::type_names = {
+const std::vector<std::tuple<BasicTypeNode *, std::string_view>> BuiltinTypes::type_names = {
     std::make_tuple(&BuiltinTypes::voyd, "void"),
     std::make_tuple(&BuiltinTypes::i64, "i64"),
     std::make_tuple(&BuiltinTypes::i32, "i32"),

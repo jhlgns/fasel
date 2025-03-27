@@ -56,12 +56,18 @@ int main(int argc, char **argv)
     }
 
     // 2. Typechecking
-    auto module_node = node_cast<ModuleNode>(make_node(nullptr, &module));
+    Context ctx{};
+    TypeChecker type_checker{ctx};
+    auto module_node = node_cast<ModuleNode>(type_checker.make_node(&module));
 
-    TypeChecker type_checker{.print_errors = true};
     if (type_checker.typecheck(module_node) == false)
     {
-        std::cout << "Typechecking failed" << std::endl;
+        std::cout << "Typechecking failed:" << std::endl;
+        for (const auto &error : type_checker.errors)
+        {
+            std::cout << error << std::endl;
+        }
+
         return 1;
     }
 
