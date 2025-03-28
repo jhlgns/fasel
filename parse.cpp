@@ -126,7 +126,7 @@ struct Parser
 
 Parser parse_expr(Parser p, AstNode *&out_expr);
 Parser parse_decl(Parser p, AstDeclaration &out_decl);
-Parser parse_block(Parser p, AstBlock &out_block);
+Parser parse_block(Parser p, AstBlock &out_block, bool allow_raw_statement);
 Parser parse_type(Parser p, AstNode *&out_type);
 
 Parser parse_statement(Parser p, AstNode *&out_statement)
@@ -153,7 +153,7 @@ Parser parse_statement(Parser p, AstNode *&out_statement)
 
         // TODO: Allow simple statements instead of blocks for then and else
 
-        if (!(p >>= parse_block(p, yf.then_block)))
+        if (!(p >>= parse_block(p, yf.then_block, true)))
         {
             return start;
         }
@@ -161,7 +161,7 @@ Parser parse_statement(Parser p, AstNode *&out_statement)
         if (p >>= p.quiet().parse_keyword("else"))
         {
             AstBlock else_block{};
-            if (!(p >>= parse_block(p, else_block)))
+            if (!(p >>= parse_block(p, else_block, true)))
             {
                 return start;
             }
@@ -192,7 +192,7 @@ Parser parse_statement(Parser p, AstNode *&out_statement)
     }
 
     AstBlock block{};
-    if (p >>= parse_block(p.quiet(), block))
+    if (p >>= parse_block(p.quiet(), block, false))
     {
         out_statement = new AstBlock{std::move(block)};
         return p;
@@ -203,12 +203,22 @@ Parser parse_statement(Parser p, AstNode *&out_statement)
     return start;
 }
 
-Parser parse_block(Parser p, AstBlock &out_block)
+Parser parse_block(Parser p, AstBlock &out_block, bool allow_raw_statement)
 {
     auto start = p;
 
-    if (!(p >>= p.parse_token(Tt::brace_open)))
+    if (!(p >>= p.quiet().parse_token(Tt::brace_open)))
     {
+        if (allow_raw_statement)
+        {
+            AstNode *statement{};
+            if (p >>= parse_statement(p, statement))
+            {
+                out_block.statements.push_back(statement);
+                return p;
+            }
+        }
+
         return start;
     }
 
@@ -315,7 +325,7 @@ Parser parse_proc(Parser p, AstProcedure &out_proc)
     }
 
     out_proc.body.is_proc_body = true;
-    if (!(p >>= parse_block(p, out_proc.body)))
+    if (!(p >>= parse_block(p, out_proc.body, true)))  // TODO: allow_raw_statement?...
     {
         return start;
     }

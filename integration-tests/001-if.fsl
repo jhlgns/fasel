@@ -8,9 +8,21 @@ OUTPUT:
 6
 7
 8
+9
+0
+100
+1000
 */
 
 test_output := proc(format: *i8, ...) void external
+
+f := proc(x: i64) i64 {
+    if x < 10 return 0
+
+    if x > 20 { return 100 }
+
+    return 1000
+}
 
 main := proc() void {
     a := 1
@@ -37,9 +49,10 @@ main := proc() void {
     test_output("5\n")
 
     x := 1
-    y := 2
 
     if x * 2 < 10 {
+        y := 2
+
         if y != 3 {
             test_output("6\n")
         } else {
@@ -49,11 +62,11 @@ main := proc() void {
 
     if false {
         test_output("xxx\n")
-    } else { if true {  // TODO: Blocks without braces
+    } else if true {
         test_output("7\n")
     } else {
         test_output("xxx\n")
-    } }
+    }
 
     if true {
         if true == true {
@@ -64,6 +77,14 @@ main := proc() void {
             }
         }
     }
+
+    if true test_output("9\n")
+    else if true test_output("xxx\n")
+    else test_output("xxx\n")
+
+    test_output("%d\n", f(5))  // TODO: Wrong format specifier for i64 (implement type casting)
+    test_output("%d\n", f(50))  // TODO: Wrong format specifier for i64 (implement type casting)
+    test_output("%d\n", f(15))  // TODO: Wrong format specifier for i64 (implement type casting)
 
     return
 }

@@ -1,0 +1,21 @@
+/*
+OUTPUT:
+912.000000
+1
+*/
+
+// TODO: %d is wrong format specifier for i64
+
+test_output := proc(format: *i8, ...) void external
+
+a := proc(a: i64, b: f32, c: bool) f64 {
+    return b * 2
+}
+
+one := proc() i64 return 1
+
+main := proc() void {
+    test_output("%f\n", a(123, 456f, false))
+    test_output("%d\n", one())
+    return
+}

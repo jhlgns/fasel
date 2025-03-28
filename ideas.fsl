@@ -27,9 +27,9 @@ Result := enum<T type> {
 }
 
 /*
-Result := enum<T type> {
+Result := struct<T type> {
     $tag i32
-    $data [/*aligned max size of each enum member*/]u8
+    $data [<aligned max size of each enum member>]u8
 }
 */
 
@@ -42,10 +42,10 @@ Result := enum<T type> {
 // Or
 @match build.platform {
     .windows: {
-        // ...
+        open_file() := proc { ... }
     }
     .linux: {
-        // ...
+        open_file() := proc { ... }
     }
 
     default: unreached
