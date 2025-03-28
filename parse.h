@@ -13,6 +13,11 @@ enum class AstKind
     declaration,
     identifier,
     if_statement,
+    while_loop,
+    break_statement,
+    continue_statement,
+    label,
+    goto_statement,
     literal,
     module,
     pointer_type,
@@ -30,9 +35,13 @@ inline const char *to_string(AstKind kind)
         case AstKind::array_type:          return "array_type";
         case AstKind::binary_operator:     return "binary_operator";
         case AstKind::block:               return "block";
+        case AstKind::break_statement:     return "break_statement";
+        case AstKind::continue_statement:  return "continue_statement";
         case AstKind::declaration:         return "declaration";
+        case AstKind::goto_statement:      return "jumpto";
         case AstKind::identifier:          return "identifier";
         case AstKind::if_statement:        return "if_statement";
+        case AstKind::label:               return "label";
         case AstKind::literal:             return "literal";
         case AstKind::module:              return "module";
         case AstKind::pointer_type:        return "pointer_type";
@@ -41,6 +50,7 @@ inline const char *to_string(AstKind kind)
         case AstKind::procedure_signature: return "procedure_signature";
         case AstKind::return_statement:    return "return_statement";
         case AstKind::type_identifier:     return "type_identifier";
+        case AstKind::while_loop:          return "while_loop";
     }
 
     UNREACHED;
@@ -117,6 +127,16 @@ struct AstBinaryOperator : AstOfKind<AstKind::binary_operator>
     AstNode *rhs{};
 };
 
+struct AstLabel : AstOfKind<AstKind::label>
+{
+    std::string_view identifier{};
+};
+
+struct AstGoto : AstOfKind<AstKind::goto_statement>
+{
+    std::string_view label_identifier{};
+};
+
 struct AstLiteral : AstOfKind<AstKind::literal>
 {
     Token token{};
@@ -142,6 +162,20 @@ struct AstIf : AstOfKind<AstKind::if_statement>
     AstNode *condition{};
     AstBlock then_block{};
     AstBlock *else_block{};
+};
+
+struct AstWhileLoop : AstOfKind<AstKind::while_loop>
+{
+    AstNode *condition{};
+    AstBlock block{};
+};
+
+struct AstBreakStatement : AstOfKind<AstKind::break_statement>
+{
+};
+
+struct AstContinueStatement : AstOfKind<AstKind::continue_statement>
+{
 };
 
 struct AstReturn : AstOfKind<AstKind::return_statement>

@@ -14,6 +14,9 @@ struct Context
     DeclarationNode *make_declaration(std::string_view identifier, Node *specified_type, Node *init_expression);
     IdentifierNode *make_identifier(std::string_view identifier);
     IfNode *make_if(Node *condition, BlockNode *then_block, BlockNode *else_block);
+    WhileLoopNode *make_while(Node *condition, BlockNode *block);
+    BreakStatementNode *make_break();
+    ContinueStatementNode *make_continue();
     LiteralNode *make_literal(std::variant<bool, uint64_t, float, double, std::string> value, char suffix);
     LiteralNode *make_bool_literal(bool value);
     LiteralNode *make_sint_literal(uint64_t value);
@@ -30,6 +33,8 @@ struct Context
         bool is_vararg,
         Node *return_type);
     ReturnNode *make_return(Node *expression);
+    GotoNode *make_goto(std::string_view label_identifier);
+    LabelNode *make_label(std::string_view identifier);
     TypeCastNode *make_type_cast(Node *type, Node *expression);
     BasicTypeNode *make_basic_type(BasicTypeNode::Kind kind, int64_t size);
     PointerTypeNode *make_pointer_type(Node *target_type);

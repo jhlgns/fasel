@@ -70,6 +70,29 @@ IfNode *Context::make_if(Node *condition, BlockNode *then_block, BlockNode *else
     return result;
 }
 
+WhileLoopNode *Context::make_while(Node *condition, BlockNode *block)
+{
+    assert(condition != nullptr);
+    assert(block != nullptr);
+
+    auto result       = new (*this) WhileLoopNode{};
+    result->condition = condition;
+    result->block     = block;
+    return result;
+}
+
+BreakStatementNode *Context::make_break()
+{
+    auto result = new (*this) BreakStatementNode{};
+    return result;
+}
+
+ContinueStatementNode *Context::make_continue()
+{
+    auto result = new (*this) ContinueStatementNode{};
+    return result;
+}
+
 LiteralNode *Context::make_literal(std::variant<bool, uint64_t, float, double, std::string> value, char suffix)
 {
     assert(std::holds_alternative<bool>(value) == false || suffix == '\0');
@@ -197,10 +220,31 @@ ReturnNode *Context::make_return(Node *expression)
     return result;
 }
 
+GotoNode *Context::make_goto(std::string_view label_identifier)
+{
+    assert(label_identifier.empty() == false);
+
+    auto result              = new (*this) GotoNode{};
+    result->label_identifier = label_identifier;
+
+    return result;
+}
+
+LabelNode *Context::make_label(std::string_view identifier)
+{
+    assert(identifier.empty() == false);
+
+    auto result        = new (*this) LabelNode{};
+    result->identifier = identifier;
+
+    return result;
+}
+
 TypeCastNode *Context::make_type_cast(Node *type, Node *expression)
 {
     assert(type != nullptr);
     assert(expression != nullptr);
+    // TODO: assert is_type(type)... for all factory functions
 
     auto result        = new (*this) TypeCastNode{};
     result->type       = type;

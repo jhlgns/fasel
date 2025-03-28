@@ -41,6 +41,7 @@ struct BuiltinTypes
     static BasicTypeNode f64;
     static BasicTypeNode boolean;
     static BasicTypeNode type;
+    static BasicTypeNode label;
     static PointerTypeNode string_literal;
     static ProcedureSignatureNode main_signature;
 

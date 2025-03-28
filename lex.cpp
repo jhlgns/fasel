@@ -5,7 +5,7 @@
 
 void next(Cursor &cursor, int n = 1)
 {
-    for (int i = 0; i < n; ++i, ++cursor.at)
+    for (auto i = 0; i < n; ++i, ++cursor.at)
     {
         if (*cursor.at == '\0')
         {
@@ -84,9 +84,6 @@ Token Lexer::peek_token() const
 
 Token Lexer::next_token()
 {
-    // TODO: Comments
-    // TODO: Floating point literals
-
     for (; is_white(*this->cursor.at); next(this->cursor))
     {
     }
@@ -175,6 +172,9 @@ Token Lexer::next_token()
                                  this->cursor.line,
                                  this->cursor.line_offset)
                           << std::endl;
+
+                // TODO: How do we return an error?
+                TODO;
             }
 
             if (this->cursor.at[0] == '\\' && this->cursor.at[1] == '"')
@@ -187,17 +187,13 @@ Token Lexer::next_token()
 
         next(this->cursor);
 
-        // ++start.at;
-        // --this->cursor.at;
         auto result = emit(*this, start, Tt::string_literal);
-        // ++this->cursor.at;
 
         return result;
     }
 
     // clang-format off
     auto simple_tokens = {
-        // std::make_tuple(":=", Tt::declaration_assignment),
         std::make_tuple("...", Tt::triple_dot),
         std::make_tuple("<<", Tt::left_shift),
         std::make_tuple(">>", Tt::right_shift),
@@ -244,8 +240,9 @@ Token Lexer::next_token()
     if (this->cursor.at > start.at)
     {
         std::string_view text{start.at, this->cursor.at};
-        auto is_keyword = text == "external" || text == "return" || text == "while" || text == "proc" ||
-                          text == "else" || text == "if" || text == "true" || text == "false";
+        auto is_keyword = text == "external" || text == "continue" || text == "return" || text == "while" ||
+                          text == "break" || text == "proc" || text == "else" || text == "if" || text == "true" ||
+                          text == "false" || text == "goto";
         if (is_keyword)
         {
             return emit(*this, start, Tt::keyword);

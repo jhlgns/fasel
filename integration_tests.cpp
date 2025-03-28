@@ -37,6 +37,11 @@ TEST_CASE("Integration tests", "[integration]")
 
         SECTION(it->path().string())
         {
+            defer
+            {
+                current_test_output.clear();
+            };
+
             auto source = read_file_as_string(it->path().string());
             REQUIRE(source.has_value());
 
@@ -100,7 +105,6 @@ TEST_CASE("Integration tests", "[integration]")
             std::cout << "============================" << std::endl;
 
             REQUIRE(current_test_output == required_output);
-            current_test_output.clear();
         }
     }
 }

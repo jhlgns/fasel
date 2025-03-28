@@ -10,10 +10,14 @@ struct BlockNode;
 enum class NodeKind
 {
     binary_operator,
+    break_statement,
     block,
+    continue_statement,
     declaration,
+    goto_statement,
     identifier,
     if_statement,
+    label,
     literal,
     module,
     procedure,
@@ -21,6 +25,7 @@ enum class NodeKind
     procedure_signature,
     return_statement,
     type_cast,
+    while_loop,
 
     basic_type,
     pointer_type,
@@ -119,7 +124,8 @@ struct BinaryOperatorNode : NodeOfKind<NodeKind::binary_operator>
 namespace llvm
 {
     class Value;
-}
+    class BasicBlock;
+}  // namespace llvm
 
 struct DeclarationNode : NodeOfKind<NodeKind::declaration>
 {
@@ -153,6 +159,20 @@ struct IfNode : NodeOfKind<NodeKind::if_statement>
     Node *condition{};
     BlockNode *then_block{};
     BlockNode *else_block{};
+};
+
+struct WhileLoopNode : NodeOfKind<NodeKind::while_loop>
+{
+    Node *condition{};
+    BlockNode *block{};
+};
+
+struct BreakStatementNode : NodeOfKind<NodeKind::break_statement>
+{
+};
+
+struct ContinueStatementNode : NodeOfKind<NodeKind::continue_statement>
+{
 };
 
 struct LiteralNode : NodeOfKind<NodeKind::literal>
@@ -192,6 +212,18 @@ struct TypeCastNode : NodeOfKind<NodeKind::type_cast>
     Node *expression{};
 };
 
+struct LabelNode : NodeOfKind<NodeKind::label>
+{
+    std::string_view identifier;
+    llvm::BasicBlock *block{};
+    llvm::BasicBlock *after{};
+};
+
+struct GotoNode : NodeOfKind<NodeKind::goto_statement>
+{
+    std::string_view label_identifier;
+};
+
 struct ModuleNode : NodeOfKind<NodeKind::module>
 {
     BlockNode *block{};
@@ -208,6 +240,7 @@ struct BasicTypeNode : NodeOfKind<NodeKind::basic_type>
         unsigned_integer,
         floatingpoint,
         type,
+        label,
     };
 
     explicit BasicTypeNode(Kind type_kind, int64_t size)

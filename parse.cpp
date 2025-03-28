@@ -151,8 +151,6 @@ Parser parse_statement(Parser p, AstNode *&out_statement)
             return start;
         }
 
-        // TODO: Allow simple statements instead of blocks for then and else
-
         if (!(p >>= parse_block(p, yf.then_block, true)))
         {
             return start;
@@ -160,6 +158,7 @@ Parser parse_statement(Parser p, AstNode *&out_statement)
 
         if (p >>= p.quiet().parse_keyword("else"))
         {
+            // TODO: Re-arm?
             AstBlock else_block{};
             if (!(p >>= parse_block(p, else_block, true)))
             {
@@ -170,6 +169,38 @@ Parser parse_statement(Parser p, AstNode *&out_statement)
         }
 
         out_statement = new AstIf{std::move(yf)};
+        return p;
+    }
+
+    if (p >>= p.quiet().parse_keyword("while"))
+    {
+        p.arm("parsing while loop");
+
+        AstWhileLoop whyle{};
+
+        if (!(p >>= parse_expr(p, whyle.condition)))
+        {
+            return start;
+        }
+
+        if (!(p >>= parse_block(p, whyle.block, true)))
+        {
+            return start;
+        }
+
+        out_statement = new AstWhileLoop{std::move(whyle)};
+        return p;
+    }
+
+    if (p >>= p.quiet().parse_keyword("break"))
+    {
+        out_statement = new AstBreakStatement{};
+        return p;
+    }
+
+    if (p >>= p.quiet().parse_keyword("continue"))
+    {
+        out_statement = new AstContinueStatement{};
         return p;
     }
 
@@ -184,7 +215,39 @@ Parser parse_statement(Parser p, AstNode *&out_statement)
         return p;
     }
 
-    AstNode *expr;
+    if (p >>= p.quiet().parse_token(Tt::colon))
+    {
+        p.arm("parsing label");
+
+        Token identifier{};
+        if (!(p >>= p.parse_token(Tt::identifier, &identifier)))
+        {
+            return start;
+        }
+
+        auto result        = new AstLabel{};
+        result->identifier = identifier.text();
+        out_statement      = result;
+        return p;
+    }
+
+    if (p >>= p.quiet().parse_keyword("goto"))
+    {
+        p.arm("parsing goto statement");
+
+        Token identifier{};
+        if (!(p >>= p.parse_token(Tt::identifier, &identifier)))
+        {
+            return start;
+        }
+
+        auto result              = new AstGoto{};
+        result->label_identifier = identifier.text();
+        out_statement            = result;
+        return p;
+    }
+
+    AstNode *expr{};
     if (p >>= parse_expr(p.quiet(), expr))
     {
         out_statement = expr;
@@ -678,7 +741,7 @@ Parser parse_type(Parser p, AstNode *&out_type)
     {
         AstArrayType type{};
 
-                // TODO: Could be empty or '..'
+        // TODO: Could be empty or '..'
         if (!(p >>= parse_expr(p, type.length_expression)))
         {
             return start;

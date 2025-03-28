@@ -170,6 +170,16 @@ Node *TypeChecker::make_node(AstNode *ast)
             return this->ctx.make_if(condition, then_block, else_block);
         }
 
+        case AstKind::while_loop:
+        {
+            auto whyle = static_cast<AstWhileLoop *>(ast);
+
+            auto condition = this->make_node(whyle->condition);
+            auto block     = node_cast<BlockNode, true>(this->make_node(&whyle->block));
+
+            return this->ctx.make_while(condition, block);
+        }
+
         case AstKind::literal:
         {
             auto literal = static_cast<AstLiteral *>(ast);
@@ -285,6 +295,28 @@ Node *TypeChecker::make_node(AstNode *ast)
             auto element_type = this->make_node(array->element_type);
 
             return this->ctx.make_array_type(length, element_type);
+        }
+
+        case AstKind::label:
+        {
+            auto label = static_cast<AstLabel *>(ast);
+            return this->ctx.make_label(label->identifier);
+        }
+
+        case AstKind::goto_statement:
+        {
+            auto gotoo = static_cast<AstGoto *>(ast);
+            return this->ctx.make_goto(gotoo->label_identifier);
+        }
+
+        case AstKind::break_statement:
+        {
+            return this->ctx.make_break();
+        }
+
+        case AstKind::continue_statement:
+        {
+            return this->ctx.make_continue();
         }
     }
 
@@ -616,12 +648,49 @@ bool TypeChecker::typecheck(Node *node)
                 return false;
             }
 
+            if (types_equal(yf->condition->type, &BuiltinTypes::boolean) == false)
+            {
+                this->error(
+                    yf,
+                    std::format(
+                        "The condition of the if-statement must be of type bool, received {}",
+                        type_to_string(yf->condition->type)));
+                return false;
+            }
+
             if (typecheck(yf->then_block) == false)
             {
                 return false;
             }
 
             if (yf->else_block != nullptr && typecheck(yf->else_block) == false)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        case NodeKind::while_loop:
+        {
+            auto whyle = static_cast<WhileLoopNode *>(node);
+
+            if (typecheck(whyle->condition) == false)
+            {
+                return false;
+            }
+
+            if (types_equal(whyle->condition->type, &BuiltinTypes::boolean) == false)
+            {
+                this->error(
+                    whyle,
+                    std::format(
+                        "The condition of the while-loop must be of type bool, received {}",
+                        type_to_string(whyle->condition->type)));
+                return false;
+            }
+
+            if (typecheck(whyle->block) == false)
             {
                 return false;
             }
@@ -878,6 +947,42 @@ bool TypeChecker::typecheck(Node *node)
 
             // cast->type is already set
         }
+
+        case NodeKind::goto_statement:
+        {
+            // TODO: Check that the label is found
+
+            return true;
+        }
+
+        case NodeKind::break_statement:
+        {
+            // TODO: Check that we are in a loop/switch
+
+            return true;
+        }
+
+        case NodeKind::continue_statement:
+        {
+            // TODO: Check that we are in a loop
+
+            return true;
+        }
+
+        case NodeKind::label:
+        {
+            auto label = static_cast<LabelNode *>(node);
+
+            auto decl     = this->ctx.make_declaration(label->identifier, &BuiltinTypes::label, label);
+            auto [it, ok] = this->current_procedure->body->declarations.emplace(std::string{label->identifier}, decl);
+            if (ok == false)
+            {
+                this->error(label, "A declaration with identifier '{}' already exists in this procedure's body");
+                return false;
+            }
+
+            return true;
+        }
     }
 
     UNREACHED;
@@ -1069,6 +1174,7 @@ BasicTypeNode BuiltinTypes::f32     = BasicTypeNode{BasicTypeNode::Kind::floatin
 BasicTypeNode BuiltinTypes::f64     = BasicTypeNode{BasicTypeNode::Kind::floatingpoint, 8};
 BasicTypeNode BuiltinTypes::boolean = BasicTypeNode{BasicTypeNode::Kind::boolean, 1};
 BasicTypeNode BuiltinTypes::type    = BasicTypeNode{BasicTypeNode::Kind::type, -1};
+BasicTypeNode BuiltinTypes::label   = BasicTypeNode{BasicTypeNode::Kind::label, -1};
 
 PointerTypeNode BuiltinTypes::string_literal = []
 {
@@ -1098,4 +1204,5 @@ const std::vector<std::tuple<BasicTypeNode *, std::string_view>> BuiltinTypes::t
     std::make_tuple(&BuiltinTypes::f64, "f64"),
     std::make_tuple(&BuiltinTypes::boolean, "bool"),
     std::make_tuple(&BuiltinTypes::type, "type"),
+    std::make_tuple(&BuiltinTypes::label, "label"),
 };
