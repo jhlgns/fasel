@@ -30,13 +30,13 @@ TEST_CASE("Integration tests", "[integration]")
 {
     for (auto it = fs::directory_iterator{"../integration-tests"}; it != fs::directory_iterator{}; ++it)
     {
+        if (it->is_regular_file() == false)
+        {
+            continue;
+        }
+
         SECTION(it->path().string())
         {
-            if (it->is_regular_file() == false)
-            {
-                continue;
-            }
-
             auto source = read_file_as_string(it->path().string());
             REQUIRE(source.has_value());
 
@@ -58,7 +58,7 @@ TEST_CASE("Integration tests", "[integration]")
             auto required_output = comment.substr(begin, end - begin);
 
             // 1. Parsing
-            AstModule module;
+            AstModule module{};
             if (parse_module(source.value(), module) == false)
             {
                 std::cout << "Parsing failed" << std::endl;
@@ -90,6 +90,7 @@ TEST_CASE("Integration tests", "[integration]")
             jit.add_module(std::move(compilation_result.context), std::move(compilation_result.module));
             auto main_address = jit.get_symbol_address("main");
             auto main         = reinterpret_cast<void (*)()>(main_address);
+            REQUIRE(main != nullptr);
 
             main();
 

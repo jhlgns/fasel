@@ -46,7 +46,7 @@ int main(int argc, char **argv)
 #endif
 
     // 1. Parsing
-    AstModule module;
+    AstModule module{};
     if (parse_module(source, module) == false)
     {
         std::cout << "Parsing failed" << std::endl;

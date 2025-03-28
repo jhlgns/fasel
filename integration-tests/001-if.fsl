@@ -1,0 +1,69 @@
+/*
+OUTPUT:
+1
+2
+3
+4
+5
+6
+7
+8
+*/
+
+test_output := proc(format: *i8, ...) void external
+
+main := proc() void {
+    a := 1
+    if a == 2 {
+        test_output("xxx\n")
+    }
+
+    test_output("1\n")
+
+    a = 2
+    if a == 2 {
+        test_output("2\n")
+    }
+
+    test_output("3\n")
+
+    a = 3
+    if a == 2 {
+        test_output("xxx\n")
+    } else {
+        test_output("4\n")
+    }
+
+    test_output("5\n")
+
+    x := 1
+    y := 2
+
+    if x * 2 < 10 {
+        if y != 3 {
+            test_output("6\n")
+        } else {
+            test_output("xxx\n")
+        }
+    }
+
+    if false {
+        test_output("xxx\n")
+    } else { if true {  // TODO: Blocks without braces
+        test_output("7\n")
+    } else {
+        test_output("xxx\n")
+    } }
+
+    if true {
+        if true == true {
+            if 3 < 1037824 {
+                if 10f >= 10f {
+                    test_output("8\n")
+                }
+            }
+        }
+    }
+
+    return
+}

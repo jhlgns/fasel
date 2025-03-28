@@ -506,6 +506,16 @@ bool TypeChecker::typecheck(Node *node)
 
             for (auto statement : block->statements)
             {
+                if (auto decl = node_cast<DeclarationNode>(statement); decl != nullptr)
+                {
+                    auto [it, ok] = this->current_block->declarations.emplace(std::string{decl->identifier}, decl);
+                    if (ok == false)
+                    {
+                        this->error(decl, std::format("Duplicate declaration of '{}'", decl->identifier));
+                        return false;
+                    }
+                }
+
                 if (this->current_procedure != nullptr)
                 {
                     // NOTE: While typechecking the module root block, current_procedure_body is nullptr
@@ -526,16 +536,6 @@ bool TypeChecker::typecheck(Node *node)
             auto decl = static_cast<DeclarationNode *>(node);
 
             assert(this->current_block != nullptr);
-
-            if (this->current_block->find_declaration(decl->identifier, false) != nullptr)
-            {
-                this->error(decl, std::format("Duplicate declaration of '{}'", decl->identifier));
-                return false;
-            }
-
-            auto [it, ok] =
-                this->current_block->declarations.insert(std::make_pair(std::string{decl->identifier}, decl));
-            assert(ok);
 
             if (typecheck(decl->init_expression) == false)
             {
@@ -684,6 +684,8 @@ bool TypeChecker::typecheck(Node *node)
         {
             auto proc = static_cast<ProcedureNode *>(node);
 
+            assert((proc->body == nullptr) == proc->is_external);
+
             auto old_procedure      = this->current_procedure;
             this->current_procedure = proc;
             defer
@@ -696,15 +698,27 @@ bool TypeChecker::typecheck(Node *node)
                 return false;
             }
 
+            // NOTE: Need to set the type before typechecking the body because the body might
+            // call this procedure recursively
+            proc->type = proc->signature;
+
             if (proc->is_external == false)
             {
+                for (auto arg : proc->signature->arguments)
+                {
+                    auto [it, ok] = proc->body->declarations.emplace(std::string{arg->identifier}, arg);
+                    if (ok == false)
+                    {
+                        this->error(arg, std::format("Duplicate argument name '{}'", arg->identifier));
+                        return false;
+                    }
+                }
+
                 if (typecheck(proc->body) == false)
                 {
                     return false;
                 }
             }
-
-            proc->type = proc->signature;
 
             return true;
         }
@@ -712,13 +726,6 @@ bool TypeChecker::typecheck(Node *node)
         case NodeKind::procedure_call:
         {
             auto call = static_cast<ProcedureCallNode *>(node);
-
-            if (call->procedure == this->current_procedure)
-            {
-                // TODO
-                this->error(call, "Recursion is not implemented yet");
-                return false;
-            }
 
             if (typecheck(call->procedure) == false)
             {

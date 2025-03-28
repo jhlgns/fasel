@@ -1,13 +1,23 @@
 /*
 OUTPUT:
-TODO
+0
+1
+1
+2
+3
+5
+8
+13
+21
+34
+55
 */
 
 test_output := proc(format: *i8, ...) void external
 
 fib := proc(n: i64) i64 {
     if n == 0 { return 0 }
-    if n == 1 return 1
+    if n == 1 { return 1 }
 
     return fib(n - 1) + fib(n - 2)
 }
@@ -20,4 +30,9 @@ main := proc() void {
     test_output("%d\n", fib(4))
     test_output("%d\n", fib(5))
     test_output("%d\n", fib(6))
+    test_output("%d\n", fib(7))
+    test_output("%d\n", fib(8))
+    test_output("%d\n", fib(9))
+    test_output("%d\n", fib(10))
+    return
 }

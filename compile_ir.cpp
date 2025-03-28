@@ -167,10 +167,13 @@ struct IrCompiler
         }
 
         assert(bin_op->type->kind == NodeKind::basic_type);
-        auto type = node_cast<BasicTypeNode, true>(bin_op->type);
+        auto lhs_simple = node_cast<BasicTypeNode, true>(bin_op->lhs->type);
+        auto rhs_simple = node_cast<BasicTypeNode, true>(bin_op->rhs->type);
+        assert(lhs_simple->type_kind == rhs_simple->type_kind);
 
-        switch (type->type_kind)
+        switch (lhs_simple->type_kind)
         {
+            case BasicTypeNode::Kind::boolean:
             case BasicTypeNode::Kind::signed_integer:
             {
                 switch (bin_op->operator_kind)
@@ -220,7 +223,7 @@ struct IrCompiler
                     case Tt::greater_than:          return this->ir.CreateICmp(CmpInst::ICMP_UGT, lhs, rhs, "iugt");
                     case Tt::less_than_or_equal:    return this->ir.CreateICmp(CmpInst::ICMP_ULE, lhs, rhs, "iule");
                     case Tt::less_than:             return this->ir.CreateICmp(CmpInst::ICMP_ULT, lhs, rhs, "iult");
-                    case Tt::logical_and:           TODO;
+                    case Tt::logical_and:           TODO;  // TODO: This should be handled by desugaring
                     case Tt::logical_or:            TODO;
 
                     default: UNREACHED;
@@ -290,6 +293,8 @@ struct IrCompiler
                 GlobalValue::LinkageTypes::ExternalLinkage,
                 decl->identifier,
                 this->module.get());
+            decl->named_value =
+                this->current_function;  // NOTE: Must set the named_value before compiling the body to allow recursion
 
             auto i = 0;
             for (auto &arg : this->current_function->args())
@@ -305,14 +310,12 @@ struct IrCompiler
                 this->generate_code(decl->init_expression);
             }
 
-            decl->named_value = this->current_function;
-
             this->current_function = nullptr;
 
             return nullptr;
         }
 
-         // TODO: There are no global variables yet and they are not on the roadmap
+        // TODO: There are no global variables yet and they are not on the roadmap
         ENSURE(this->current_block->is_global() == false);
 
         // Declaration assignment to init expresion
@@ -334,10 +337,47 @@ struct IrCompiler
             return decl->named_value;
         }
 
+        if (isa<Argument>(decl->named_value))
+        {
+            return decl->named_value;
+        }
+
         return this->ir.CreateLoad(type, decl->named_value, "load");
     }
 
-    Value *generate_code(IfNode *yf) { TODO; }
+    Value *generate_code(IfNode *yf)
+    {
+        auto condition = this->generate_code(yf->condition);
+
+        auto if_cond = this->ir.CreateICmpNE(condition, ConstantInt::get(this->ir.getInt1Ty(), 0), "ifcond");
+
+        auto then_block  = BasicBlock::Create(this->llvm_context, "then", this->current_function);
+        auto else_block  = BasicBlock::Create(this->llvm_context, "else");
+        auto merge_block = BasicBlock::Create(this->llvm_context, "merge");
+
+        this->ir.CreateCondBr(if_cond, then_block, else_block);
+
+        this->ir.SetInsertPoint(then_block);
+        this->generate_code(yf->then_block);
+        this->ir.CreateBr(merge_block);
+        then_block = this->ir.GetInsertBlock();
+
+        this->current_function->insert(this->current_function->end(), else_block);
+        this->ir.SetInsertPoint(else_block);
+        if (yf->else_block != nullptr)
+        {
+            this->generate_code(yf->else_block);
+        }
+        this->ir.CreateBr(merge_block);
+        else_block = this->ir.GetInsertBlock();
+
+        this->current_function->insert(this->current_function->end(), merge_block);
+        this->ir.SetInsertPoint(merge_block);
+
+        // auto phi = this->ir.CreatePHI();   TODO: Continue here later for ternary
+
+        return nullptr;
+    }
 
     Value *generate_code(LiteralNode *literal)
     {
@@ -423,6 +463,20 @@ struct IrCompiler
     Value *generate_code(ProcedureNode *proc)
     {
         assert(proc->is_external == false);
+
+        for (auto arg : proc->signature->arguments)
+        {
+            for (auto &the_arg : this->current_function->args())
+            {
+                if (StringRef{arg->identifier} == the_arg.getName())
+                {
+                    arg->named_value = &the_arg;
+                }
+            }
+
+            assert(arg->named_value != nullptr);
+        }
+
         this->allocate_locals(proc->body);
         this->generate_code(proc->body);
 

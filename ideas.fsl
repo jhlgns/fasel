@@ -1,0 +1,127 @@
+use build
+use json
+use game/entity as *
+use c_header sys/socket as c_socket
+
+Entity := struct {
+    x f32 @Json("pos_x")
+    y f32 @Json("pos_y")
+} @BinaryVersion(1)
+
+Record := struct{x f32, y f32}
+
+ctor := proc(me *Entity) {
+    x := me.x
+}
+
+dtor := proc(me *Entity) {
+    category := match me {
+        {x: 0, y: 0}: "At origin"
+        _: "Somewhere else"
+    }
+}
+
+Result := enum<T type> {
+    Ok(result T),
+    Error(message String)
+}
+
+/*
+Result := enum<T type> {
+    $tag i32
+    $data [/*aligned max size of each enum member*/]u8
+}
+*/
+
+@if build.is_windows() {
+   // ...
+} else {
+   // ...
+}
+
+// Or
+@match build.platform {
+    .windows: {
+        // ...
+    }
+    .linux: {
+        // ...
+    }
+
+    default: unreached
+}
+
+test "builtin testing" {
+    assert x == y
+}
+
+c_import := proc() Result<string> {
+    s := c_socket.socket(c_socket.af_inet, c_socket.af_stream, 0)
+    if s.! -> NetworkError{}
+    defer c_socket.close(s)
+
+    msg := read_string(s) catch -> err;
+
+    -> msg
+}
+
+procedure_with_named_argument := proc(a i64, message String, does_exist named := false) i64 {
+    a, b := 1, 2
+    a, b = b, a
+
+    ternary = if a == 1 "True" else if b == 0 { b := "Maybe"; -> b } else "False"
+
+    result := open_file("file.dat")
+    if result is Ok(file) -> file
+
+    file := open_file("file.dat") catch -> ProcessingError("Could not open file: $err")
+    defer close(file)
+
+    c, d := match a, b {
+        >0, <10: "First case", true;
+        1, _: "Second case", false;
+    }
+
+    procedure_with_named_argument(123, "msg", does_exist: true)
+    -> 100
+} @DllPublic
+
+short_function := proc() String -> "Hakuna matata"
+
+h1 := proc(setup trailing proc(*h1)) {
+}
+
+global_string: *i8 @Embed("file.dat")
+
+main := proc() {
+    t := typeof 1
+
+    uninitialized: Entity = noinit  // Skip ctor
+
+    constant final := 3.~.~
+
+    trailing_unary := false.!
+
+    lambda_1 := proc(a i64) -> a * 2  // proc(a i64) i64
+    lambda_2 := -> 1234  // proc() i64
+
+    debugger  // JS-like debug break
+
+    print("$trailing_unary:^10 ${constant * 2}")
+
+    for file in list_dir(".") do print(file)
+    for file, index in list_dir(".") do print(file)
+
+    if single_line -> 0
+    if single_line do something()
+
+    ptr: *Entity = noinit
+    coalesce := ptr?.x  // Type enum { f32, null }
+
+    for i := 0; i < 10; i++ do print(i)
+
+    h1 {
+        align: .center
+        text: "Headline"
+    }
+}
