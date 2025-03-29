@@ -1,0 +1,19 @@
+THE FASEL COMPILER LICENSE
+==========================
+
+ALLOWED USAGE
+-------------
+THE SOURCE CODE OF THIS REPOSITORY OR PARTS OF IT MAY NOT BE USED FOR ANY MEANS OTHER THAN THE FOLLOWING 5 ALLOWED USAGES WHICH ARE GRANTED TO NATURAL, BIOLOGICAL HUMANS...
+    1. ...reading the source code with their own eyes (or other primary senses in case of sight-impairment), interpreting and understanding it exclusively with their own biological brain
+    2. ...wanting to try out and/or modify their copy of the Fasel compiler out of curiosity or to use it for creating programs in the Fasel language
+    3. ...wanting to directly contribute to the development of the Fasel compiler by creating pull requests or interacting with the primary maintainer of this repository in other means
+    4. ...being curious about this project and want to read the code like a newspaper column and do nothing more with it for now
+    5. ...including this exact license in every copy or fork of this repository that they might publish (copy-left)
+
+STRICTLY DISALLOWED USAGE
+-------------------------
+ONLY THE USAGES DESCRIBED ABOVE ARE ALLOWED. ADDITIONALLY, THE FOLLOWING USAGES ARE EXPLICITLY STRICTLY PROHIBITED:
+* COMPANIES HARVESTING DATA FOR AI TRAINING PURPOSES ARE STRICTLY PROHIBITED OF OBTAINING COPIES OF THIS REPOSITORY - OR PARTS OF IT - OR REPOSITORY META-INFORMATION - FOR ANY MEANS
+* PUBLISHING THE SOURCE CODE OR PARTS OF IT TO SAID COMPANIES, FOR EXAMPLE BY OPENING THE PROJECT INSIDE AN EDITOR THAT HAS AI SERVICE INTEGRATIONS, IS ALSO STRICTLY PROHIBITED
+* INSERTING CODE TAKEN FROM THIS REPOSITORY OR WRITTEN IN THE FASEL PROGRAMMING LANGUAGE INTO AI CHATS OR GIVING IT TO SERVICES THAT MIGHT STORE IT AND USE IT LATER FOR AI TRAINING PURPOSES IS ALSO STRICTLY PROHIBITED
+
