@@ -163,7 +163,6 @@ struct AstBlock : AstOfKind<AstKind::block>
     };
 
     std::vector<AstNode *> statements{};
-    bool is_compiler_error_block{};
     CompilerErrorKind expected_compiler_error_kind{};
 };
 

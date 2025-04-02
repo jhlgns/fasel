@@ -55,6 +55,15 @@ test "builtin testing" {
     assert x == y
 }
 
+// Contracts
+fopen(path: *i8, mode: *i8) *FILE [
+    assert_input: { strlen(path) > 0, strlen(mode) > 0, },
+    assert_returned: returned != null /* wrong, just to demonstrate */,
+    caller_responsibility: if returned != null must_call(fclose(returned))
+] {
+    // ...
+}
+
 c_import := proc() Result<string> {
     s := c_socket.socket(c_socket.af_inet, c_socket.af_stream, 0)
     if s.! -> NetworkError{}

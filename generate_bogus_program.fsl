@@ -3,35 +3,42 @@ srand := proc(seed: u32) void external
 rand := proc() i32 external
 printf := proc(format: *i8, ...) i32 external
 
+chance := proc(chance: f32) bool
+{
+    rolled := rand() % 100
+    return rolled < chance * 100f
+}
+
+randint := proc(min: i64, max: i64) i32
+{
+    return rand() % (max - min) + min
+}
+
 main := proc() void
 {
     srand(time(0))
 
-    while true {
+    num_procs := rand() % 500 + 100
+
+    while num_procs > 0 {
+        num_procs = num_procs - 1
+
         // printf("%d\n", rand())
         if rand() % 100 > 98 break
 
         value := rand() % 100
 
-        length := rand() % 10 + 5
-        i := 0
-        while i < length {
-            printf("%c", (rand() % 26 + 97))
-            i = i + 1
-        }
-        printf(" := proc() {\n")
+        ident() printf(" := proc() ") type() printf(" {\n")
 
-        if value > 0 if value <= 10 {
-            printf("    if ") expr() printf(" {\n")
-            printf("        // ...\n")
-            printf("    }\n")
-        } else if value < 20 {
-            printf("    while y {\n")
-            printf("        // ...\n")
-            printf("    }\n")
+        num_statements := randint(10, 30)
+
+        while num_statements > 0 {
+            num_statements = num_statements - 1
+            statement()
         }
 
         printf("}\n")
+        printf("\n")
     }
 
     return
@@ -47,19 +54,65 @@ do_indent := proc(level: i64) void
     return
 }
 
+type := proc() void
+{
+    // TODO
+    printf("void")
+}
+
+ident := proc() void
+{
+    length := rand() % 10 + 5
+    i := 0
+    while i < length {
+        printf("%c", (rand() % 26 + 97))
+        i = i + 1
+    }
+}
+
 expr := proc() void
 {
-    value := rand() % 30
+    value := randint(0, 100)
+    // printf("VALUE = %d\n", value)
 
-    if value > 0 if value < 10 {
-        // Binary operator
-        expr() printf(" + ") expr()
-        return
-    } else if value < 20 {
-        // TODO
-        // return
+    if value < 30 {
+        if value < 2       { expr() printf(" + ") expr() }
+        else if value < 4  { expr() printf(" - ") expr() }
+        else if value < 6  { expr() printf(" * ") expr() }
+        else if value < 8  { expr() printf(" / ") expr() }
+        else if value < 10 { expr() printf(" | ") expr() }
+        else if value < 12 { expr() printf(" & ") expr() }
+        else if value < 14 { expr() printf(" || ") expr() }
+        else if value < 16 { expr() printf(" && ") expr() }
+        else if value < 18 { expr() printf(" ^ ") expr() }
+        else if value < 20 { expr() printf(" == ") expr() }
+        else if value < 22 { expr() printf(" != ") expr() }
+        else if value < 24 { expr() printf(" > ") expr() }
+        else if value < 26 { expr() printf(" >= ") expr() }
+        else if value < 28 { expr() printf(" < ") expr() }
+        else               { expr() printf(" <= ") expr() }
+    } else if value < 66 {
+        ident()
     } else {
         // Numerical literal
         printf("%d", rand())  // TODO: Specifier
     }
 }
+
+statement := proc() void
+{
+    value := rand() % 100
+
+    if value < 33 {
+        printf("    if ") expr() printf(" {\n")
+        printf("        // ...\n")
+        printf("    }\n")
+    } else if value < 66 {
+        printf("    while ") expr() printf(" {\n")
+        printf("        // ...\n")
+        printf("    }\n")
+    } else {
+        printf("    ") expr() printf("\n")
+    }
+}
+

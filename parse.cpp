@@ -359,8 +359,6 @@ Parser parse_compiler_error_block(Parser p, AstBlock &out_block)
         return start;
     }
 
-    out_block.is_compiler_error_block = true;
-
     if (!(p >>= parse_block(p, out_block, false)))
     {
         return start;

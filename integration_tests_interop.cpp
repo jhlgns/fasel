@@ -12,7 +12,7 @@ extern "C"
     {
         for (const auto &sink : sinks)
         {
-            sink(FailureTestEvent{});
+            sink(FailureTestEvent{message});
         }
     }
 

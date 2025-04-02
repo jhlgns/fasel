@@ -23,11 +23,14 @@ static int _init = []
         {
             if (std::holds_alternative<FailureTestEvent>(event))
             {
+                auto failure = std::get<FailureTestEvent>(event);
+                std::cout << "test_fail called: " << failure.message << std::endl;
                 REQUIRE(false);
             }
             else if (std::holds_alternative<OutputTestEvent>(event))
             {
-                current_test_output += std::get<OutputTestEvent>(event).output;
+                auto output = std::get<OutputTestEvent>(event);
+                current_test_output += output.output;
             }
             else
             {

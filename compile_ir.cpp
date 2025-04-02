@@ -170,7 +170,105 @@ struct IrCompiler
 
     Value *generate_code(BinaryOperatorNode *bin_op)
     {
+        assert(bin_op->inferred_type()->kind == NodeKind::basic_type);
         assert(Node::types_equal(bin_op->lhs->inferred_type(), bin_op->rhs->inferred_type()));
+
+        switch (bin_op->operator_kind)
+        {
+            case Tt::logical_and:
+            {
+                // lhs() && rhs()
+                // ->
+                // value := false
+                // l := lhs()
+                // if l {
+                //     r := rhs()
+                //     if r {
+                //         value = true
+                //     }
+                // }
+
+                auto function = this->ir.GetInsertBlock()->getParent();
+
+                auto result_alloc = this->ir.CreateAlloca(this->ir.getInt1Ty(), nullptr, "and_result_temp");
+                this->ir.CreateStore(this->ir.getFalse(), result_alloc);
+
+                auto lhs_true_block = BasicBlock::Create(this->llvm_context, "and_lhs_true", function);
+                auto rhs_true_block = BasicBlock::Create(this->llvm_context, "and_rhs_true", function);
+                auto end_block      = BasicBlock::Create(this->llvm_context, "and_end", function);
+
+                auto lhs = this->generate_code(bin_op->lhs);
+                assert(lhs != nullptr && lhs->getType()->isIntegerTy(1));
+
+                auto lhs_true = this->ir.CreateICmpEQ(lhs, this->ir.getTrue(), "and_lhs_eq_true");
+                this->ir.CreateCondBr(lhs_true, lhs_true_block, end_block);
+
+                this->ir.SetInsertPoint(lhs_true_block);
+                auto rhs = this->generate_code(bin_op->rhs);
+                assert(rhs != nullptr && rhs->getType()->isIntegerTy(1));
+
+                auto rhs_true = this->ir.CreateICmpEQ(rhs, this->ir.getTrue(), "and_rhs_eq_true");
+                this->ir.CreateCondBr(rhs_true, rhs_true_block, end_block);
+
+                this->ir.SetInsertPoint(rhs_true_block);
+                this->ir.CreateStore(this->ir.getTrue(), result_alloc);
+                this->ir.CreateBr(end_block);
+
+                this->ir.SetInsertPoint(end_block);
+
+                auto load = this->ir.CreateLoad(this->ir.getInt1Ty(), result_alloc, "and_result");
+
+                return load;
+            }
+
+            case Tt::logical_or:
+            {
+                // lhs() || rhs()
+                // ->
+                // value := true
+                // l := lhs()
+                // if l == false {
+                //     r := rhs()
+                //     if r == false {
+                //         value = false
+                //     }
+                // }
+
+                auto function = this->ir.GetInsertBlock()->getParent();
+
+                auto result_alloc = this->ir.CreateAlloca(this->ir.getInt1Ty(), nullptr, "or_result_temp");
+                this->ir.CreateStore(this->ir.getTrue(), result_alloc);
+
+                auto lhs_true_block = BasicBlock::Create(this->llvm_context, "or_lhs_true", function);
+                auto rhs_true_block = BasicBlock::Create(this->llvm_context, "or_rhs_true", function);
+                auto end_block      = BasicBlock::Create(this->llvm_context, "or_end", function);
+
+                auto lhs = this->generate_code(bin_op->lhs);
+                assert(lhs != nullptr && lhs->getType()->isIntegerTy(1));
+
+                auto lhs_true = this->ir.CreateICmpEQ(lhs, this->ir.getFalse(), "or_lhs_eq_true");
+                this->ir.CreateCondBr(lhs_true, lhs_true_block, end_block);
+
+                this->ir.SetInsertPoint(lhs_true_block);
+                auto rhs = this->generate_code(bin_op->rhs);
+                assert(rhs != nullptr && rhs->getType()->isIntegerTy(1));
+
+                auto rhs_true = this->ir.CreateICmpEQ(rhs, this->ir.getFalse(), "or_rhs_eq_true");
+                this->ir.CreateCondBr(rhs_true, rhs_true_block, end_block);
+
+                this->ir.SetInsertPoint(rhs_true_block);
+                this->ir.CreateStore(this->ir.getFalse(), result_alloc);
+                this->ir.CreateBr(end_block);
+
+                this->ir.SetInsertPoint(end_block);
+
+                auto load = this->ir.CreateLoad(this->ir.getInt1Ty(), result_alloc, "or_result");
+
+                return load;
+            }
+
+            default: break;
+        }
 
         auto is_store = bin_op->operator_kind == Tt::assign;
 
@@ -185,10 +283,7 @@ struct IrCompiler
             return this->ir.CreateStore(rhs, lhs);
         }
 
-        assert(bin_op->inferred_type()->kind == NodeKind::basic_type);
         auto lhs_simple = node_cast<BasicTypeNode, true>(bin_op->lhs->inferred_type());
-        auto rhs_simple = node_cast<BasicTypeNode, true>(bin_op->rhs->inferred_type());
-        assert(lhs_simple->type_kind == rhs_simple->type_kind);
 
         switch (lhs_simple->type_kind)
         {
@@ -382,7 +477,7 @@ struct IrCompiler
 
         auto function = this->ir.GetInsertBlock()->getParent();
 
-        auto if_cond = this->ir.CreateICmpNE(condition, ConstantInt::get(this->ir.getInt1Ty(), 0), "if_cond");
+        auto if_cond = this->ir.CreateICmpNE(condition, this->ir.getFalse(), "if_cond");
 
         auto then_block = BasicBlock::Create(this->llvm_context, "if_then", function);
         auto else_block = BasicBlock::Create(this->llvm_context, "if_else");
@@ -435,7 +530,7 @@ struct IrCompiler
         this->ir.SetInsertPoint(head_block);
 
         auto condition  = this->generate_code(whyle->condition);
-        auto while_cond = this->ir.CreateICmpNE(condition, ConstantInt::get(this->ir.getInt1Ty(), 0), "while_cond");
+        auto while_cond = this->ir.CreateICmpNE(condition, this->ir.getFalse(), "while_cond");
         this->ir.CreateCondBr(while_cond, body_block, done_block);
 
         this->ir.SetInsertPoint(body_block);
@@ -478,7 +573,7 @@ struct IrCompiler
         {
             assert(basic_type != nullptr);
             auto value = std::get<uint64_t>(literal->value);
-            return ConstantInt::get(IntegerType::get(this->llvm_context, basic_type->size * 8), value);
+            return this->ir.getIntN(basic_type->size * 8, value);
         }
 
         if (std::holds_alternative<float>(literal->value))
@@ -496,7 +591,7 @@ struct IrCompiler
         if (std::holds_alternative<bool>(literal->value))
         {
             auto value = std::get<bool>(literal->value);
-            return ConstantInt::get(this->ir.getInt1Ty(), value);
+            return this->ir.getInt1(value);
         }
 
         if (std::holds_alternative<std::string>(literal->value))

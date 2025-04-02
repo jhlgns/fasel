@@ -265,4 +265,5 @@ const std::vector<std::tuple<BasicTypeNode *, std::string_view>> BuiltinTypes::t
     std::make_tuple(&BuiltinTypes::boolean, "bool"),
     std::make_tuple(&BuiltinTypes::type, "type"),
     std::make_tuple(&BuiltinTypes::label, "label"),
+    std::make_tuple(&BuiltinTypes::poison, "poison"),
 };

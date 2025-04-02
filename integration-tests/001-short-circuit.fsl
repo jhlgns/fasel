@@ -1,0 +1,136 @@
+/*
+OUTPUT:
+==== AND ====
+false1 called
+
+false1 called
+
+true1 called
+false2 called
+
+true1 called
+true2 called
+Here
+==== OR ====
+false1 called
+false2 called
+
+false1 called
+true2 called
+Here
+
+true1 called
+Here
+
+true1 called
+Here
+==== MIXED ====
+false1 called
+false2 called
+
+false1 called
+true2 called
+Here
+
+false1 called
+true1 called
+true2 called
+Here
+*/
+
+test_output := proc(message: *i8) void external
+test_fail := proc(message: *i8, ...) void external
+
+true1 := proc() bool
+{
+    test_output("true1 called\n")
+    return true
+}
+
+true2 := proc() bool
+{
+    test_output("true2 called\n")
+    return true
+}
+
+false1 := proc() bool
+{
+    test_output("false1 called\n")
+    return false
+}
+
+false2 := proc() bool
+{
+    test_output("false2 called\n")
+    return false
+}
+
+main := proc() void
+{
+    test_output("==== AND ====\n")
+
+    if false1() && false2() {
+        test_fail("1")
+    }
+
+    test_output("\n")
+
+    if false1() && true2() {
+        test_fail("2")
+    }
+
+    test_output("\n")
+
+    if true1() && false2() {
+        test_fail("3")
+    }
+
+    test_output("\n")
+
+    if true1() && true2() {
+        test_output("Here\n")
+    }
+
+    test_output("==== OR ====\n")
+
+    if false1() || false2() {
+        test_fail("4")
+    }
+
+    test_output("\n")
+
+    if false1() || true2() {
+        test_output("Here\n")
+    }
+
+    test_output("\n")
+
+    if true1() || false2() {
+        test_output("Here\n")
+    }
+
+    test_output("\n")
+
+    if true1() || true2() {
+        test_output("Here\n")
+    }
+
+    test_output("==== MIXED ====\n")
+
+    if false1() || false2() && true2() {
+        test_fail("5")
+    }
+
+    test_output("\n")
+
+    if false1() && false2() || true2() {
+        test_output("Here\n")
+    }
+
+    test_output("\n")
+
+    if false1() || true1() && true2() {
+        test_output("Here\n")
+    }
+}
+

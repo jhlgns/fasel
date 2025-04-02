@@ -15,6 +15,7 @@ struct OutputTestEvent
 
 struct FailureTestEvent
 {
+    std::string_view message{};
 };
 
 using TestEvent = std::variant<OutputTestEvent, FailureTestEvent>;
