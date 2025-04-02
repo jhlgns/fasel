@@ -16,7 +16,8 @@ OUTPUT:
 
 test_output := proc(format: *i8, ...) void external
 
-f := proc(x: i64) i64 {
+f := proc(x: i64) i64
+{
     if x < 10 return 0
 
     if x > 20 { return 100 }
@@ -24,7 +25,8 @@ f := proc(x: i64) i64 {
     return 1000
 }
 
-main := proc() void {
+main := proc() void
+{
     a := 1
     if a == 2 {
         test_output("xxx\n")

@@ -59,23 +59,18 @@ BinaryOperatorCategory bin_op_category(TokenType type)
     }
 }
 
-DeclarationNode *BlockNode::find_declaration(std::string_view name, bool recurse) const
+bool spread_poison(const Node *possibly_infected, Node *spread_to)
 {
-    auto it = this->declarations.find(std::string{name});
-    if (it != this->declarations.end())
+    if (possibly_infected->is_poisoned())
     {
-        return it->second;
+        spread_to->set_inferred_type(&BuiltinTypes::poison);
+        return true;
     }
 
-    if (recurse && this->parent_block != nullptr)
-    {
-        return this->parent_block->find_declaration(name);
-    }
-
-    return nullptr;
+    return false;
 }
 
-Node *TypeChecker::make_node(AstNode *ast)
+Node *NodeConverter::make_node(AstNode *ast)
 {
     switch (ast->kind)
     {
@@ -84,16 +79,9 @@ Node *TypeChecker::make_node(AstNode *ast)
             auto bin_op = static_cast<AstBinaryOperator *>(ast);
 
             auto lhs = this->make_node(bin_op->lhs);
-            if (lhs == nullptr)
-            {
-                return nullptr;
-            }
-
             auto rhs = this->make_node(bin_op->rhs);
-            if (rhs == nullptr)
-            {
-                return nullptr;
-            }
+
+            assert(lhs != nullptr && rhs != nullptr);
 
             return this->ctx.make_binary_operator(bin_op->type, lhs, rhs);
         }
@@ -104,12 +92,7 @@ Node *TypeChecker::make_node(AstNode *ast)
 
             auto result = this->ctx.make_block(this->current_block, {});
 
-            auto old_block      = this->current_block;
-            this->current_block = result;
-            defer
-            {
-                this->current_block = old_block;
-            };
+            SET_TEMPORARILY(this->current_block, result);
 
             for (auto statement : block->statements)
             {
@@ -145,7 +128,8 @@ Node *TypeChecker::make_node(AstNode *ast)
                 init_expr = this->make_node(decl->init_expression);
             }
 
-            return this->ctx.make_declaration(decl->identifier.text(), specified_type, init_expr);
+            return this->ctx
+                .make_declaration(decl->identifier.text(), specified_type, init_expr, decl->is_procedure_argument);
         }
 
         case AstKind::identifier:
@@ -156,7 +140,7 @@ Node *TypeChecker::make_node(AstNode *ast)
 
         case AstKind::if_statement:
         {
-            auto yf = static_cast<AstIf *>(ast);
+            auto yf = static_cast<AstIfStatement *>(ast);
 
             auto condition  = this->make_node(yf->condition);
             auto then_block = node_cast<BlockNode, true>(this->make_node(&yf->then_block));
@@ -234,7 +218,7 @@ Node *TypeChecker::make_node(AstNode *ast)
 
         case AstKind::return_statement:
         {
-            auto retyrn = static_cast<AstReturn *>(ast);
+            auto retyrn = static_cast<AstReturnStatement *>(ast);
 
             Node *expression{};
             if (retyrn->expression == nullptr)
@@ -305,7 +289,7 @@ Node *TypeChecker::make_node(AstNode *ast)
 
         case AstKind::goto_statement:
         {
-            auto gotoo = static_cast<AstGoto *>(ast);
+            auto gotoo = static_cast<AstGotoStatement *>(ast);
             return this->ctx.make_goto(gotoo->label_identifier);
         }
 
@@ -323,14 +307,204 @@ Node *TypeChecker::make_node(AstNode *ast)
     UNREACHED
 }
 
-bool TypeChecker::typecheck(Node *node)
+//
+// DeclarationRegistrar
+//
+
+void DeclarationRegistrar::register_declarations(ModuleNode *node)
 {
-    // NOTE: Only set the type if the node is an expression, do not assign void to statements
+    ::visit(node, *this);
+}
 
-    // TODO: Better error messages - print the inferred types if they are wrong so the user knows what is going on
+// Registers the declaration inside the current block
+void DeclarationRegistrar::visit(DeclarationNode *declaration)
+{
+    declaration->containing_block = this->current_block;
 
+    if (declaration->is_procedure_argument)
+    {
+        return;
+    }
+
+    if (declaration->init_expression->kind == NodeKind::procedure && this->current_block->is_global() == false)
+    {
+        this->error(declaration, "Procedures can only be defined at module scope");
+        return;
+    }
+
+    auto [it, ok] = this->current_block->declarations.emplace(std::string{declaration->identifier}, declaration);
+    if (ok == false)
+    {
+        this->error(
+            declaration,
+            std::format(
+                "A declaration with identifier '{}' already exists in this procedure's body",
+                declaration->identifier));
+    }
+}
+
+// Registers the label as a declaration in the current block
+void DeclarationRegistrar::visit(LabelNode *label)
+{
+    auto decl     = this->ctx.make_declaration(label->identifier, &BuiltinTypes::label, label, false);
+    auto [it, ok] = this->current_procedure->body->declarations.emplace(std::string{label->identifier}, decl);
+    if (ok == false)
+    {
+        this->error(
+            label,
+            std::format(
+                "A declaration with identifier '{}' already exists in this procedure's body",
+                label->identifier));
+    }
+}
+
+// Registers the arguments of the procedure as declarations inside the current block
+void DeclarationRegistrar::visit(ProcedureNode *procedure)
+{
+    if (procedure->is_external)
+    {
+        return;
+    }
+
+    for (auto arg : procedure->signature->arguments)
+    {
+        auto [it, ok] = procedure->body->declarations.emplace(std::string{arg->identifier}, arg);
+        if (ok == false)
+        {
+            this->error(arg, std::format("Duplicate argument name '{}'", arg->identifier));
+        }
+    }
+}
+
+//
+// TypeChecker
+//
+
+bool TypeChecker::do_implicit_cast_if_necessary(Node *&node, Node *type)
+{
+    assert(type->is_type());
+    assert(Node::types_equal(type, &BuiltinTypes::poison) == false);
+    assert(node->is_type() == false || node->kind == NodeKind::nop);
+
+    // NOTE: Also set inferred type on the cast node
+
+    if (Node::types_equal(node->inferred_type(), type))
+    {
+        return true;
+    }
+
+    auto can_cast = false;
+
+    auto src_basic  = node_cast<BasicTypeNode>(node->inferred_type());
+    auto dest_basic = node_cast<BasicTypeNode>(type);
+    if (src_basic != nullptr && dest_basic != nullptr)
+    {
+        can_cast = src_basic->is_numerical() && dest_basic->is_numerical();
+    }
+
+    // TODO
+
+    if (can_cast)
+    {
+        auto cast = this->ctx.make_type_cast(type, node);
+        cast->set_inferred_type(type);
+        node = cast;
+    }
+
+    return can_cast;
+}
+
+// Does not modify the binary operator. Possibly does implicit casts for its operands
+// and returns the coerced type, such that the inferred types of both operands are
+// equal to the coerced type.
+// In case of an error, the binary operator is poisoned.
+Node *TypeChecker::coerce_types(BinaryOperatorNode *bin_op)
+{
+    auto lhs_basic = node_cast<const BasicTypeNode>(bin_op->lhs->inferred_type());
+    auto rhs_basic = node_cast<const BasicTypeNode>(bin_op->rhs->inferred_type());
+
+    auto is_invalid_type =
+        lhs_basic == nullptr || rhs_basic == nullptr || //
+        (lhs_basic->is_numerical() == false && lhs_basic->type_kind != BasicTypeNode::Kind::boolean) ||
+        (rhs_basic->is_numerical() == false && rhs_basic->type_kind != BasicTypeNode::Kind::boolean);
+
+    if (is_invalid_type)
+    {
+        this->error(
+            bin_op,
+            true,
+            std::format(
+                "Invalid operand type for binary operator (left: {}, right: {})",
+                Node::type_to_string(bin_op->lhs->inferred_type()),
+                Node::type_to_string(bin_op->rhs->inferred_type())));
+        return &BuiltinTypes::poison;
+    }
+
+    auto different_integer_signedness = //
+        lhs_basic->type_kind == BasicTypeNode::Kind::signed_integer &&
+            rhs_basic->type_kind == BasicTypeNode::Kind::unsigned_integer ||
+        lhs_basic->type_kind == BasicTypeNode::Kind::unsigned_integer &&
+            rhs_basic->type_kind == BasicTypeNode::Kind::signed_integer;
+    if (different_integer_signedness)
+    {
+        this->error(
+            bin_op,
+            true,
+            std::format(
+                "Binary operator operands with different signedness are not supported (left: {}, right: {})",
+                Node::type_to_string(bin_op->lhs->inferred_type()),
+                Node::type_to_string(bin_op->rhs->inferred_type())));
+        return &BuiltinTypes::poison;
+    }
+
+    auto is_float = lhs_basic->type_kind == BasicTypeNode::Kind::floatingpoint ||
+                    rhs_basic->type_kind == BasicTypeNode::Kind::floatingpoint;
+    auto max_size = std::max(lhs_basic->size, rhs_basic->size);
+
+    assert(max_size == 1 || max_size == 2 || max_size == 4 || max_size == 8);
+
+    auto type_kind = is_float ? BasicTypeNode::Kind::floatingpoint : lhs_basic->type_kind;
+    BasicTypeNode *type{};
+    for (auto [builtin_type, name] : BuiltinTypes::type_names)
+    {
+        if (builtin_type->type_kind == type_kind && builtin_type->size == max_size)
+        {
+            type = builtin_type;
+        }
+    }
+
+    if (this->do_implicit_cast_if_necessary(bin_op->lhs, type) == false)
+    {
+        UNREACHED;
+    }
+
+    if (this->do_implicit_cast_if_necessary(bin_op->rhs, type) == false)
+    {
+        UNREACHED;
+    }
+
+    return type;
+}
+
+void TypeChecker::typecheck(Node *node)
+{
+    this->typecheck_internal(node);
+    assert(node->inferred_type() != nullptr);
+}
+
+void TypeChecker::typecheck_internal(Node *node)
+{
     assert(node != nullptr);
-    assert(node->type == nullptr);
+
+    if (auto decl = node_cast<DeclarationNode>(node);
+        decl != nullptr && decl->init_expression->inferred_type() != nullptr)
+    {
+        // Has already been checked out of order because its identifier has been
+        // accessed before the typechecker reached the declaration
+        return;
+    }
+
+    assert(node->inferred_type() == nullptr);
 
     switch (node->kind)
     {
@@ -338,189 +512,129 @@ bool TypeChecker::typecheck(Node *node)
         {
             auto bin_op = static_cast<BinaryOperatorNode *>(node);
 
-            if (typecheck(bin_op->lhs) == false)
+            this->typecheck(bin_op->lhs);
+            this->typecheck(bin_op->rhs);
+
+            if (spread_poison(bin_op->lhs, bin_op))
             {
-                return false;
+                return;
             }
 
-            if (typecheck(bin_op->rhs) == false)
+            if (spread_poison(bin_op->rhs, bin_op))
             {
-                return false;
+                return;
             }
 
-            auto lhs_basic = node_cast<const BasicTypeNode>(bin_op->lhs->type);
-            auto rhs_basic = node_cast<const BasicTypeNode>(bin_op->rhs->type);
+            auto lhs_basic = node_cast<const BasicTypeNode>(bin_op->lhs->inferred_type());
+            auto rhs_basic = node_cast<const BasicTypeNode>(bin_op->rhs->inferred_type());
 
             auto category = bin_op_category(bin_op->operator_kind);
             switch (category)
             {
                 case BinaryOperatorCategory::arithmetic:
                 {
-                    if (lhs_basic == nullptr)
+                    auto coerced_type = this->coerce_types(bin_op);
+
+                    if (Node::types_equal(coerced_type, &BuiltinTypes::poison) == false)
                     {
-                        this->error(bin_op, "Invalid kind of type for left operand");
-                        return false;
+                        bin_op->set_inferred_type(coerced_type);
                     }
 
-                    if (rhs_basic == nullptr)
-                    {
-                        this->error(bin_op, "Invalid kind of type for right operand");
-                        return false;
-                    }
-
-                    if (lhs_basic->is_numerical() == false || rhs_basic->is_numerical() == false)
-                    {
-                        this->error(bin_op, "Arithmetic binary operators require numerical expressions on both sides");
-                        return false;
-                    }
-
-                    auto invalid_integer_types = lhs_basic->type_kind == BasicTypeNode::Kind::signed_integer &&
-                                                     rhs_basic->type_kind == BasicTypeNode::Kind::unsigned_integer ||
-                                                 lhs_basic->type_kind == BasicTypeNode::Kind::unsigned_integer &&
-                                                     rhs_basic->type_kind == BasicTypeNode::Kind::signed_integer;
-                    if (invalid_integer_types)
-                    {
-                        this->error(
-                            bin_op,
-                            "Arithmetic on different signedness is not supported. You must cast the operands to the same type.");
-                        return false;
-                    }
-
-                    auto is_float = lhs_basic->type_kind == BasicTypeNode::Kind::floatingpoint ||
-                                    rhs_basic->type_kind == BasicTypeNode::Kind::floatingpoint;
-                    auto max_size = std::max(lhs_basic->size, rhs_basic->size);
-
-                    assert(max_size == 1 || max_size == 2 || max_size == 4 || max_size == 8);
-
-                    auto type_kind = is_float ? BasicTypeNode::Kind::floatingpoint : lhs_basic->type_kind;
-                    BasicTypeNode *type{};
-                    for (auto [builtin_type, name] : BuiltinTypes::type_names)
-                    {
-                        if (builtin_type->type_kind == type_kind && builtin_type->size == max_size)
-                        {
-                            type = builtin_type;
-                        }
-                    }
-
-                    ENSURE(type != nullptr);
-
-                    bin_op->type = type;
-
-                    if (is_float)
-                    {
-                        if (types_equal(type, lhs_basic) == false)
-                        {
-                            bin_op->lhs = this->ctx.make_type_cast(type, bin_op->lhs);
-                        }
-
-                        if (types_equal(type, rhs_basic) == false)
-                        {
-                            bin_op->rhs = this->ctx.make_type_cast(type, bin_op->rhs);
-                        }
-                    }
-
-                    return true;
+                    return;
                 }
 
                 case BinaryOperatorCategory::bitwise_operation:
                 {
-                    if (lhs_basic == nullptr)
+                    auto is_invalid_type = lhs_basic == nullptr || rhs_basic == nullptr ||
+                                           lhs_basic->type_kind != BasicTypeNode::Kind::unsigned_integer ||
+                                           rhs_basic->type_kind != BasicTypeNode::Kind::unsigned_integer;
+                    if (is_invalid_type)
                     {
-                        this->error(bin_op, "Invalid kind of type for left operand");
-                        return false;
-                    }
-
-                    if (rhs_basic == nullptr)
-                    {
-                        this->error(bin_op, "Invalid kind of type for right operand");
-                        return false;
-                    }
-
-                    if (lhs_basic->type_kind != BasicTypeNode::Kind::unsigned_integer ||
-                        rhs_basic->type_kind != BasicTypeNode::Kind::unsigned_integer)
-                    {
-                        this->error(bin_op, "Bitwise binary operators require unsigned integer operands on both sides");
-                        return false;
+                        this->error(
+                            bin_op,
+                            true,
+                            std::format(
+                                "Invalid operand type for bitwise binary operator, expected unsigned integer operands (left: {}, right: {})",
+                                Node::type_to_string(bin_op->lhs->inferred_type()),
+                                Node::type_to_string(bin_op->rhs->inferred_type())));
+                        return;
                     }
 
                     auto max_size = std::max(lhs_basic->size, rhs_basic->size);
                     assert(max_size == 1 || max_size == 2 || max_size == 4 || max_size == 8);
 
-                    auto type = new BasicTypeNode{BasicTypeNode::Kind::unsigned_integer, max_size};
+                    auto type = this->ctx.make_basic_type(BasicTypeNode::Kind::unsigned_integer, max_size);
 
-                    bin_op->type = type;
+                    bin_op->set_inferred_type(type);
 
-                    return true;
+                    if (this->do_implicit_cast_if_necessary(bin_op->lhs, type) == false)
+                    {
+                        UNREACHED;
+                    }
+
+                    if (this->do_implicit_cast_if_necessary(bin_op->rhs, type) == false)
+                    {
+                        UNREACHED;
+                    }
+
+                    return;
                 }
 
                 case BinaryOperatorCategory::comparison:
                 {
-                    // TODO
+                    auto coerced_type = this->coerce_types(bin_op);
+                    // NOTE: Set to boolean regardless of the coercion result because
+                    // comparison operators always infer to booleans
+                    bin_op->set_inferred_type(&BuiltinTypes::boolean);
 
-                    if (types_equal(bin_op->lhs->type, bin_op->rhs->type) == false)
-                    {
-                        this->error(bin_op, "Only expressions of the same time can be compared");
-                        return false;
-                    }
-
-                    bin_op->type = &BuiltinTypes::boolean;
-
-                    return true;
+                    return;
                 }
 
                 case BinaryOperatorCategory::short_circuit_boolean:
                 {
-                    if (lhs_basic == nullptr)
+                    bin_op->set_inferred_type(&BuiltinTypes::boolean);
+
+                    auto is_invalid_type = lhs_basic == nullptr || rhs_basic == nullptr ||
+                                           lhs_basic->type_kind != BasicTypeNode::Kind::boolean ||
+                                           rhs_basic->type_kind != BasicTypeNode::Kind::boolean;
+                    if (is_invalid_type)
                     {
-                        this->error(bin_op, "Invalid type for left operand");
-                        return false;
+                        this->error(
+                            bin_op,
+                            false,
+                            std::format(
+                                "Invalid non-boolean operand type for boolean short circuit binary operator (left: {}, right: {})",
+                                Node::type_to_string(bin_op->lhs->inferred_type()),
+                                Node::type_to_string(bin_op->rhs->inferred_type())));
+                        return;
                     }
 
-                    if (rhs_basic == nullptr)
-                    {
-                        this->error(bin_op, "Invalid type for right operand");
-                        return false;
-                    }
-
-                    if (lhs_basic->type_kind != BasicTypeNode::Kind::boolean)
-                    {
-                        this->error(bin_op, "Left side is not a boolean expression");
-                        return false;
-                    }
-
-                    if (lhs_basic->type_kind != BasicTypeNode::Kind::boolean)
-                    {
-                        this->error(bin_op, "Right side is not a boolean expression");
-                        return false;
-                    }
-
-                    bin_op->type = &BuiltinTypes::boolean;
-
-                    return true;
+                    return;
                 }
 
                 case BinaryOperatorCategory::assignment:
                 {
-                    if (types_equal(bin_op->lhs->type, bin_op->rhs->type) == false)
+                    bin_op->set_inferred_type(&BuiltinTypes::voyd);
+
+                    if (this->do_implicit_cast_if_necessary(bin_op->rhs, bin_op->lhs->inferred_type()) == false)
                     {
                         this->error(
                             bin_op,
+                            false,
                             std::format(
-                                "Assignment type mismatch (left side {} vs. right side {})",
-                                type_to_string(bin_op->lhs->type),
-                                type_to_string(bin_op->rhs->type)));
-                        return false;
+                                "Incompatible operand types for assignment operator (left: {}, right: {})",
+                                Node::type_to_string(bin_op->lhs->inferred_type()),
+                                Node::type_to_string(bin_op->rhs->inferred_type())));
+                        return;
                     }
 
-                    bin_op->type = bin_op->lhs->type;
-
-                    return true;
+                    return;
                 }
 
                 default: UNREACHED;
             }
 
-            return true;
+            return;
         }
 
         case NodeKind::block:
@@ -528,64 +642,45 @@ bool TypeChecker::typecheck(Node *node)
             // TODO: Check somehow that the procedure contains a return statement
 
             auto block = static_cast<BlockNode *>(node);
+            block->set_inferred_type(&BuiltinTypes::voyd);
 
-            auto old_block      = this->current_block;
-            this->current_block = block;
-            defer
-            {
-                this->current_block = old_block;
-            };
+            SET_TEMPORARILY(this->current_block, block);
 
             for (auto statement : block->statements)
             {
-                if (auto decl = node_cast<DeclarationNode>(statement); decl != nullptr)
-                {
-                    auto [it, ok] = this->current_block->declarations.emplace(std::string{decl->identifier}, decl);
-                    if (ok == false)
-                    {
-                        this->error(decl, std::format("Duplicate declaration of '{}'", decl->identifier));
-                        return false;
-                    }
-                }
-
-                if (this->current_procedure != nullptr)
-                {
-                    // NOTE: While typechecking the module root block, current_procedure_body is nullptr
-                    statement->time = ++this->current_procedure->body->current_time;
-                }
-
-                if (typecheck(statement) == false)
-                {
-                    return false;
-                }
+                this->typecheck(statement);
             }
 
-            return true;
+            return;
         }
 
         case NodeKind::declaration:
         {
             auto decl = static_cast<DeclarationNode *>(node);
 
+            decl->set_inferred_type(&BuiltinTypes::voyd);
+
             assert(this->current_block != nullptr);
 
-            if (typecheck(decl->init_expression) == false)
+            this->typecheck(decl->init_expression);
+            if (decl->init_expression->is_poisoned())
             {
-                return false;
+                return;
             }
 
-            if (decl->identifier == "main" && this->current_block->is_global())
+            if (decl->identifier == "main" && decl->is_global())
             {
                 auto proc = node_cast<ProcedureNode>(decl->init_expression);
-                if (proc == nullptr || types_equal(&BuiltinTypes::main_signature, proc->signature) == false)
+                if (proc == nullptr || Node::types_equal(&BuiltinTypes::main_signature, proc->signature) == false)
                 {
                     this->error(
-                        proc,
+                        decl,
+                        false,
                         std::format(
                             "A global declaration called 'main' must be of type {}, received {}",
-                            type_to_string(&BuiltinTypes::main_signature),
-                            type_to_string(decl->init_expression->type)));
-                    return false;
+                            Node::type_to_string(&BuiltinTypes::main_signature),
+                            Node::type_to_string(decl->init_expression->inferred_type())));
+                    return;
                 }
             }
 
@@ -594,108 +689,104 @@ bool TypeChecker::typecheck(Node *node)
                 if (decl->init_expression->kind == NodeKind::nop)
                 {
                     assert(decl->specified_type != nullptr);
-                    decl->init_expression->type = decl->specified_type;
+                    decl->init_expression->set_inferred_type(decl->specified_type);
                 }
 
-                if (types_equal(decl->specified_type, decl->init_expression->type) == false)
+                if (this->do_implicit_cast_if_necessary(decl->init_expression, decl->specified_type) == false)
                 {
                     this->error(
                         decl,
+                        false,
                         std::format(
-                            "The declaration init expression does not have the same inferred type as the specified type on the declaration (specified type: {}; inferred type: {})",
-                            type_to_string(decl->specified_type),
-                            type_to_string(decl->init_expression->type)));
-                    return false;
+                            "The type of the declaration initialization expression is not implicitly convertible to the specified type (specified type: {}, init expression type: {})",
+                            Node::type_to_string(decl->specified_type),
+                            Node::type_to_string(decl->init_expression->inferred_type())));
+                    return;
                 }
             }
 
-            return true;
+            return;
         }
 
         case NodeKind::identifier:
         {
             auto ident = static_cast<IdentifierNode *>(node);
-            auto decl  = this->current_block->find_declaration(ident->identifier);
 
+            auto decl = this->current_block->find_declaration(ident->identifier);
             if (decl == nullptr)
             {
-                this->error(ident, std::format("Could not find the declaration of identifier '{}'", ident->identifier));
-                return false;
+                this->error(
+                    ident,
+                    true,
+                    std::format("Could not find the declaration of identifier '{}'", ident->identifier));
+                return;
             }
 
-            // TODO: The time checking does not work yet, because the time is not assigned
-            // recursively in expressions - only the top level block statements get a time
-            // assert(ident->time >= 0 && decl->time >= 0);
-            //
-            // if (ident->time < decl->time)
-            // {
-            //     this->error(ident, std::format("Identifier '{}' referenced before its declaration", ident->identifier));
-            //     return false;
-            // }
+            ident->declaration = decl;
+            // TODO: Check that the identifier is accessed after the declaration
 
-            assert(decl->init_expression->type != nullptr);
-            ident->type = decl->init_expression->type;
+            // Identifier might be accessed before its declaration has been typechecked
+            if (decl->init_expression->inferred_type() == nullptr)
+            {
+                // NOTE: current_procedure is not set to the according parent procedure,
+                // which is fine as long as there can only be global procedures
+                SET_TEMPORARILY(this->current_block, decl->containing_block);
+                this->typecheck(decl);
+            }
 
-            return true;
+            assert(decl->init_expression->inferred_type() != nullptr);
+            ident->set_inferred_type(decl->init_expression->inferred_type());
+
+            return;
         }
 
         case NodeKind::if_statement:
         {
-            auto yf = static_cast<IfNode *>(node);
+            auto yf = static_cast<IfStatementNode *>(node);
+            yf->set_inferred_type(&BuiltinTypes::voyd);
 
-            if (typecheck(yf->condition) == false)
-            {
-                return false;
-            }
-
-            if (types_equal(yf->condition->type, &BuiltinTypes::boolean) == false)
+            this->typecheck(yf->condition);
+            if (Node::types_equal(yf->condition->inferred_type(), &BuiltinTypes::boolean) == false)
             {
                 this->error(
                     yf,
+                    false,
                     std::format(
                         "The condition of the if-statement must be of type bool, received {}",
-                        type_to_string(yf->condition->type)));
-                return false;
+                        Node::type_to_string(yf->condition->inferred_type())));
+                return;
             }
 
-            if (typecheck(yf->then_block) == false)
+            this->typecheck_and_spread_poison(yf->then_block, yf);
+
+            if (yf->else_block != nullptr)
             {
-                return false;
+                this->typecheck(yf->else_block);
             }
 
-            if (yf->else_block != nullptr && typecheck(yf->else_block) == false)
-            {
-                return false;
-            }
-
-            return true;
+            return;
         }
 
         case NodeKind::while_loop:
         {
             auto whyle = static_cast<WhileLoopNode *>(node);
+            whyle->set_inferred_type(&BuiltinTypes::voyd);
 
-            if (typecheck(whyle->condition) == false)
-            {
-                return false;
-            }
-
-            if (types_equal(whyle->condition->type, &BuiltinTypes::boolean) == false)
+            this->typecheck(whyle->condition);
+            if (Node::types_equal(whyle->condition->inferred_type(), &BuiltinTypes::boolean) == false)
             {
                 this->error(
                     whyle,
+                    false,
                     std::format(
                         "The condition of the while-loop must be of type bool, received {}",
-                        type_to_string(whyle->condition->type)));
-                return false;
+                        Node::type_to_string(whyle->condition->inferred_type())));
+                return;
             }
 
-            if (typecheck(whyle->block) == false)
-            {
-                return false;
-            }
+            this->typecheck(whyle->body);
 
-            return true;
+            return;
         }
 
         case NodeKind::literal:
@@ -706,47 +797,46 @@ bool TypeChecker::typecheck(Node *node)
             {
                 if (literal->suffix == 'u')
                 {
-                    literal->type = &BuiltinTypes::u64;
+                    literal->set_inferred_type(&BuiltinTypes::u64);
                 }
                 else
                 {
                     assert(literal->suffix == '\0');
-                    literal->type = &BuiltinTypes::i64;
+                    literal->set_inferred_type(&BuiltinTypes::i64);
                 }
 
-                return true;
+                return;
             }
 
             if (std::holds_alternative<float>(literal->value))
             {
                 assert(literal->suffix == 'f');
-                literal->type = &BuiltinTypes::f32;
-                return true;
+                literal->set_inferred_type(&BuiltinTypes::f32);
+                return;
             }
 
             if (std::holds_alternative<double>(literal->value))
             {
                 assert(literal->suffix == '\0');
-                literal->type = &BuiltinTypes::f64;
-                return true;
+                literal->set_inferred_type(&BuiltinTypes::f64);
+                return;
             }
 
             if (std::holds_alternative<bool>(literal->value))
             {
                 assert(literal->suffix == '\0');
-                literal->type = &BuiltinTypes::boolean;
-                return true;
+                literal->set_inferred_type(&BuiltinTypes::boolean);
+                return;
             }
 
             if (std::holds_alternative<std::string>(literal->value))
             {
                 assert(literal->suffix == '\0');
-                literal->type = &BuiltinTypes::string_literal;
-                return true;
+                literal->set_inferred_type(&BuiltinTypes::string_literal);
+                return;
             }
 
             UNREACHED;
-            return false;
         }
 
         case NodeKind::procedure:
@@ -755,104 +845,115 @@ bool TypeChecker::typecheck(Node *node)
 
             assert((proc->body == nullptr) == proc->is_external);
 
-            auto old_procedure      = this->current_procedure;
-            this->current_procedure = proc;
-            defer
-            {
-                this->current_procedure = old_procedure;
-            };
+            SET_TEMPORARILY(this->current_procedure, proc);
 
-            if (typecheck(proc->signature) == false)
-            {
-                return false;
-            }
+            this->typecheck_and_spread_poison(proc->signature, proc);
 
             // NOTE: Need to set the type before typechecking the body because the body might
             // call this procedure recursively
-            proc->type = proc->signature;
+            if (proc->inferred_type() == nullptr)
+            {
+                proc->set_inferred_type(proc->signature);
+            }
 
             if (proc->is_external == false)
             {
-                for (auto arg : proc->signature->arguments)
+                this->typecheck(proc->body);
+
+                auto got_return = false;
+                for (auto statement : proc->body->statements)
                 {
-                    auto [it, ok] = proc->body->declarations.emplace(std::string{arg->identifier}, arg);
-                    if (ok == false)
+                    if (statement->kind == NodeKind::return_statement)
                     {
-                        this->error(arg, std::format("Duplicate argument name '{}'", arg->identifier));
-                        return false;
+                        got_return = true;
                     }
                 }
 
-                if (typecheck(proc->body) == false)
+                if (got_return == false)
                 {
-                    return false;
+                    if (Node::types_equal(proc->signature->return_type, &BuiltinTypes::voyd) == false)
+                    {
+                        this->error(proc, false, "Non-void procedure does not return a value");
+                        return;
+                    }
+
+                // For void procedures, create an implicit return statement if it is missing
+                    proc->body->statements.push_back(this->ctx.make_return(nullptr));
                 }
             }
 
-            return true;
+            return;
         }
 
         case NodeKind::procedure_call:
         {
             auto call = static_cast<ProcedureCallNode *>(node);
 
-            if (typecheck(call->procedure) == false)
+            if (this->typecheck_and_spread_poison(call->procedure, call))
             {
-                return false;
+                return;
             }
 
-            if (call->procedure->type->kind != NodeKind::procedure_signature)
+            if (call->procedure->inferred_type()->kind != NodeKind::procedure_signature)
             {
-                this->error(node, "The procedure expression is not callable");
-                return false;
+                this->error(call, true, "The procedure expression is not callable");
+                return;
             }
 
-            auto signature = node_cast<ProcedureSignatureNode, true>(call->procedure->type);
+            auto signature = node_cast<ProcedureSignatureNode, true>(call->procedure->inferred_type());
+            call->set_inferred_type(signature->return_type);
 
             if (signature->is_vararg)
             {
                 if (call->arguments.size() < signature->arguments.size())
                 {
                     this->error(
-                        node,
+                        call,
+                        false,
                         std::format(
-                            "Expected at least {} arguments for variadic procedure call",
-                            signature->arguments.size()));
-                    return false;
+                            "Expected at least {} arguments for call to variadic procedure (received {})",
+                            signature->arguments.size(),
+                            call->arguments.size()));
+                    return;
                 }
             }
             else if (call->arguments.size() != signature->arguments.size())
             {
                 this->error(
-                    node,
-                    "The procedure call does not have the same number of arguments as the procedure signature");
-                return false;
+                    call,
+                    false,
+                    std::format(
+                        "The procedure call does not have the same number of arguments as the procedure signature (expected {}, received {})",
+                        call->arguments.size(),
+                        signature->arguments.size()));
+                return;
             }
 
             for (auto i = 0; i < call->arguments.size(); ++i)
             {
-                if (typecheck(call->arguments[i]) == false)
+                this->typecheck(call->arguments[i]);
+                if (call->arguments[i]->is_poisoned())
                 {
-                    return false;
+                    continue;
                 }
 
                 if (i < signature->arguments.size() &&
-                    types_equal(call->arguments[i]->type, signature->arguments[i]->init_expression->type) == false)
+                    Node::types_equal(
+                        call->arguments[i]->inferred_type(),
+                        signature->arguments[i]->init_expression->inferred_type()) == false)
                 {
                     this->error(
-                        node,
+                        call,
+                        false,
                         std::format(
                             "Wrong type passed for argument '{}' (expected: {}, received: {})",
                             signature->arguments[i]->identifier,
-                            type_to_string(signature->arguments[i]->init_expression->type),
-                            type_to_string(call->arguments[i]->type)));
-                    return false;
+                            Node::type_to_string(signature->arguments[i]->init_expression->inferred_type()),
+                            Node::type_to_string(call->arguments[i]->inferred_type())));
                 }
             }
 
-            call->type = signature->return_type;
-
-            return true;
+            return;
         }
 
         case NodeKind::procedure_signature:
@@ -861,54 +962,54 @@ bool TypeChecker::typecheck(Node *node)
 
             for (auto arg : signature->arguments)
             {
-                if (typecheck(arg) == false)
-                {
-                    return false;
-                }
+                this->typecheck_and_spread_poison(arg, signature);
             }
 
-            signature->type = &BuiltinTypes::type;
+            if (signature->inferred_type() == nullptr)
+            {
+                signature->set_inferred_type(&BuiltinTypes::type);
+            }
 
-            return true;
+            return;
         }
 
         case NodeKind::return_statement:
         {
-            auto retyrn = static_cast<ReturnNode *>(node);
+            auto retyrn = static_cast<ReturnStatementNode *>(node);
+            retyrn->set_inferred_type(&BuiltinTypes::voyd);
 
-            if (retyrn->expression->kind == NodeKind::nop)
+            this->typecheck(retyrn->expression);
+            if (retyrn->expression->is_poisoned())
             {
-                return true;
-            }
-            else if (typecheck(retyrn->expression) == false)
-            {
-                return false;
+                return;
             }
 
-            if (types_equal(retyrn->expression->type, this->current_procedure->signature->return_type) == false)
+            if (Node::types_equal(this->current_procedure->signature->return_type, &BuiltinTypes::voyd) == false &&
+                this->do_implicit_cast_if_necessary(
+                    retyrn->expression,
+                    this->current_procedure->signature->return_type) == false)
             {
                 this->error(
                     retyrn,
+                    false,
                     std::format(
-                        "The type of the return expression does not match the procedure return type (expected {}, received {})",
-                        type_to_string(this->current_procedure->signature->return_type),
-                        type_to_string(retyrn->expression->type)));
-                return false;
+                        "The type of the return expression is not implicitly convertible to the procedure return type (return type of procedure: {}, inferred type of return expression: {})",
+                        Node::type_to_string(this->current_procedure->signature->return_type),
+                        Node::type_to_string(retyrn->expression->inferred_type())));
+                return;
             }
 
-            return true;
+            return;
         }
 
         case NodeKind::module:
         {
             auto module = static_cast<ModuleNode *>(node);
+            module->set_inferred_type(&BuiltinTypes::voyd);
 
-            if (typecheck(module->block) == false)
-            {
-                return false;
-            }
+            this->typecheck(module->block);
 
-            return true;
+            return;
         }
 
         case NodeKind::basic_type:
@@ -916,293 +1017,101 @@ bool TypeChecker::typecheck(Node *node)
         case NodeKind::array_type:
         case NodeKind::struct_type:
         {
-            node->type = &BuiltinTypes::type;
+            node->set_inferred_type(&BuiltinTypes::type);
 
-            return true;
+            return;
         }
 
         case NodeKind::nop:
         {
-            node->type = node;  // TODO: Smelly
+            node->set_inferred_type(node);
 
-            return true;
+            return;
         }
 
         case NodeKind::type_cast:
         {
             auto cast = static_cast<TypeCastNode *>(node);
+            cast->set_inferred_type(cast->target_type);
 
-            assert(cast->type != nullptr);
+            assert(cast->target_type != nullptr);
 
             // TODO: Pointer casting etc.
 
-            auto src_basic  = node_cast<BasicTypeNode, true>(cast->expression->type);
-            auto dest_basic = node_cast<BasicTypeNode, true>(cast->type);
+            auto src_basic    = node_cast<BasicTypeNode, true>(cast->expression->inferred_type());
+            auto target_basic = node_cast<BasicTypeNode, true>(cast->target_type);
 
-            if (src_basic->is_numerical() == false || dest_basic->is_numerical() == false)
+            if (src_basic->is_numerical() == false || target_basic->is_numerical() == false)
             {
-                this->error(cast, "TODO: Currently only casts between numerical types are implemented");
-                return false;
+                this->error(cast, false, "TODO: Currently only casts between numerical types are implemented");
+                return;
             }
-
-            // cast->type is already set
         }
 
         case NodeKind::goto_statement:
         {
             // TODO: Check that the label is found
 
-            return true;
+            node->set_inferred_type(&BuiltinTypes::voyd);
+
+            return;
         }
 
         case NodeKind::break_statement:
         {
             // TODO: Check that we are in a loop/switch
 
-            return true;
+            node->set_inferred_type(&BuiltinTypes::voyd);
+
+            return;
         }
 
         case NodeKind::continue_statement:
         {
             // TODO: Check that we are in a loop
 
-            return true;
+            node->set_inferred_type(&BuiltinTypes::voyd);
+
+            return;
         }
 
         case NodeKind::label:
         {
             auto label = static_cast<LabelNode *>(node);
 
-            auto decl     = this->ctx.make_declaration(label->identifier, &BuiltinTypes::label, label);
-            auto [it, ok] = this->current_procedure->body->declarations.emplace(std::string{label->identifier}, decl);
-            if (ok == false)
-            {
-                this->error(label, "A declaration with identifier '{}' already exists in this procedure's body");
-                return false;
-            }
+            label->set_inferred_type(&BuiltinTypes::voyd);
 
-            return true;
+            return;
         }
     }
 
     UNREACHED;
 }
 
-void TypeChecker::error(const Node *node, std::string_view message)
+bool TypeChecker::typecheck_and_spread_poison(Node *node, Node *parent)
 {
+    assert(node->inferred_type() == nullptr);
+    // assert(
+    //     (parent->inferred_type() == nullptr ||
+    //      Node::types_equal(parent->inferred_type(), &BuiltinTypes::poison) == false) &&
+    //     "Already poisoned");
+
+    this->typecheck(node);
+    if (spread_poison(node, parent))
+    {
+        return true;
+    }
+
+    return false;
+}
+
+void TypeChecker::error(Node *node, bool poison, std::string_view message)
+{
+    if (poison)
+    {
+        node->set_inferred_type(&BuiltinTypes::poison);
+    }
+
     // TODO: Print a string representation of the node for context
     this->errors.push_back(std::format("Type error: {}", message));
 }
-
-
-bool types_equal(const Node *lhs, const Node *rhs)
-{
-    assert(lhs != nullptr && rhs != nullptr);
-
-    if (lhs->kind != rhs->kind)
-    {
-        return false;
-    }
-
-    switch (lhs->kind)
-    {
-        case NodeKind::basic_type:
-        {
-            auto lhs_basic = static_cast<const BasicTypeNode *>(lhs);
-            auto rhs_basic = static_cast<const BasicTypeNode *>(rhs);
-
-            return lhs_basic->type_kind == rhs_basic->type_kind && lhs_basic->size == rhs_basic->size;
-        }
-
-        case NodeKind::pointer_type:
-        {
-            auto lhs_pointer = static_cast<const PointerTypeNode *>(lhs);
-            auto rhs_pointer = static_cast<const PointerTypeNode *>(rhs);
-
-            return types_equal(lhs_pointer->target_type, rhs_pointer->target_type);
-        }
-
-        case NodeKind::array_type:
-        {
-            auto lhs_array = static_cast<const ArrayTypeNode *>(lhs);
-            auto rhs_array = static_cast<const ArrayTypeNode *>(rhs);
-
-            if (types_equal(lhs_array->element_type, rhs_array->element_type) == false)
-            {
-                return false;
-            }
-
-            // TODO
-            auto lhs_length_literal = node_cast<LiteralNode>(lhs_array->length);
-            auto rhs_length_literal = node_cast<LiteralNode>(rhs_array->length);
-
-            if (lhs_length_literal == nullptr || rhs_length_literal == nullptr)
-            {
-                FATAL("Only literal array length expressions are supported for now");
-            }
-
-            if (std::holds_alternative<uint64_t>(lhs_length_literal->value) == false ||
-                std::holds_alternative<uint64_t>(rhs_length_literal->value) == false)
-            {
-                FATAL("The length expression is not an integer literal value");
-            }
-
-            auto lhs_length = std::get<uint64_t>(lhs_length_literal->value);
-            auto rhs_length = std::get<uint64_t>(rhs_length_literal->value);
-
-            return lhs_length == rhs_length;
-        }
-
-        case NodeKind::procedure_signature:
-        {
-            auto lhs_signature = static_cast<const ProcedureSignatureNode *>(lhs);
-            auto rhs_signature = static_cast<const ProcedureSignatureNode *>(rhs);
-
-            if (lhs_signature->is_vararg != rhs_signature->is_vararg)
-            {
-                return false;
-            }
-
-            if (types_equal(lhs_signature->return_type, rhs_signature->return_type) == false)
-            {
-                return false;
-            }
-
-            if (lhs_signature->arguments.size() != rhs_signature->arguments.size())
-            {
-                return false;
-            }
-
-            for (auto i = 0; i < lhs_signature->arguments.size(); ++i)
-            {
-                auto lhs_type = lhs_signature->arguments[i]->init_expression->type;
-                auto rhs_type = rhs_signature->arguments[i]->init_expression->type;
-
-                if (types_equal(lhs_type, rhs_type) == false)
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        case NodeKind::struct_type:
-        {
-            // TODO
-            UNREACHED;
-        }
-
-        default: UNREACHED;
-    }
-}
-
-std::string type_to_string(const Node *type /*, BlockNode *block */)
-{
-    switch (type->kind)
-    {
-        case NodeKind::procedure_signature:
-        {
-            auto signature     = static_cast<const ProcedureSignatureNode *>(type);
-            std::string result = "proc(";
-
-            for (auto i = 0; i < signature->arguments.size(); ++i)
-            {
-                result += type_to_string(signature->arguments[i]->init_expression->type);
-
-                if (i + 1 < signature->arguments.size())
-                {
-                    result += ", ";
-                }
-            }
-
-            result += ") ";
-            result += type_to_string(signature->return_type);
-
-            return result;
-        }
-
-        case NodeKind::basic_type:
-        {
-            auto simple_type = static_cast<const BasicTypeNode *>(type);
-
-            for (auto [builtin_type, name] : BuiltinTypes::type_names)
-            {
-                if (types_equal(builtin_type, type))
-                {
-                    return std::string{name};
-                }
-            }
-
-            // TODO: Custom type names
-            UNREACHED;
-        }
-
-        case NodeKind::pointer_type:
-        {
-            auto pointer_type = static_cast<const PointerTypeNode *>(type);
-            return "*" + type_to_string(pointer_type->target_type);
-        }
-
-        case NodeKind::array_type:
-        {
-            auto array_type = static_cast<const ArrayTypeNode *>(type);
-            // TODO
-            return "[...]" + type_to_string(array_type->element_type);
-        }
-
-        case NodeKind::struct_type:
-        {
-            // TODO
-            UNREACHED;
-        }
-
-        default: UNREACHED;
-    }
-}
-
-BasicTypeNode BuiltinTypes::voyd    = BasicTypeNode{BasicTypeNode::Kind::voyd, -1};
-BasicTypeNode BuiltinTypes::i64     = BasicTypeNode{BasicTypeNode::Kind::signed_integer, 8};
-BasicTypeNode BuiltinTypes::i32     = BasicTypeNode{BasicTypeNode::Kind::signed_integer, 4};
-BasicTypeNode BuiltinTypes::i16     = BasicTypeNode{BasicTypeNode::Kind::signed_integer, 2};
-BasicTypeNode BuiltinTypes::i8      = BasicTypeNode{BasicTypeNode::Kind::signed_integer, 1};
-BasicTypeNode BuiltinTypes::u64     = BasicTypeNode{BasicTypeNode::Kind::unsigned_integer, 8};
-BasicTypeNode BuiltinTypes::u32     = BasicTypeNode{BasicTypeNode::Kind::unsigned_integer, 4};
-BasicTypeNode BuiltinTypes::u16     = BasicTypeNode{BasicTypeNode::Kind::unsigned_integer, 2};
-BasicTypeNode BuiltinTypes::u8      = BasicTypeNode{BasicTypeNode::Kind::unsigned_integer, 1};
-BasicTypeNode BuiltinTypes::f32     = BasicTypeNode{BasicTypeNode::Kind::floatingpoint, 4};
-BasicTypeNode BuiltinTypes::f64     = BasicTypeNode{BasicTypeNode::Kind::floatingpoint, 8};
-BasicTypeNode BuiltinTypes::boolean = BasicTypeNode{BasicTypeNode::Kind::boolean, 1};
-BasicTypeNode BuiltinTypes::type    = BasicTypeNode{BasicTypeNode::Kind::type, -1};
-BasicTypeNode BuiltinTypes::label   = BasicTypeNode{BasicTypeNode::Kind::label, -1};
-
-PointerTypeNode BuiltinTypes::string_literal = []
-{
-    PointerTypeNode result{};
-    result.target_type = &BuiltinTypes::i8;
-    return result;
-}();
-
-ProcedureSignatureNode BuiltinTypes::main_signature = []
-{
-    ProcedureSignatureNode result;
-    result.return_type = &BuiltinTypes::voyd;
-    return result;
-}();
-
-const std::vector<std::tuple<BasicTypeNode *, std::string_view>> BuiltinTypes::type_names = {
-    std::make_tuple(&BuiltinTypes::voyd, "void"),
-    std::make_tuple(&BuiltinTypes::i64, "i64"),
-    std::make_tuple(&BuiltinTypes::i32, "i32"),
-    std::make_tuple(&BuiltinTypes::i16, "i16"),
-    std::make_tuple(&BuiltinTypes::i8, "i8"),
-    std::make_tuple(&BuiltinTypes::u64, "u64"),
-    std::make_tuple(&BuiltinTypes::u32, "u32"),
-    std::make_tuple(&BuiltinTypes::u16, "u16"),
-    std::make_tuple(&BuiltinTypes::u8, "u8"),
-    std::make_tuple(&BuiltinTypes::f32, "f32"),
-    std::make_tuple(&BuiltinTypes::f64, "f64"),
-    std::make_tuple(&BuiltinTypes::boolean, "bool"),
-    std::make_tuple(&BuiltinTypes::type, "type"),
-    std::make_tuple(&BuiltinTypes::label, "label"),
-};

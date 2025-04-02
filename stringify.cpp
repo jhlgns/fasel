@@ -1,5 +1,7 @@
 #include "stringify.h"
+
 #include "basics.h"
+
 #include <format>
 
 template<typename... Args>
@@ -69,7 +71,7 @@ std::string to_string(int indent_level, AstTypeIdentifier *node)
     return result;
 }
 
-std::string to_string(int indent_level, AstIf *node)
+std::string to_string(int indent_level, AstIfStatement *node)
 {
     std::string result;
 
@@ -159,7 +161,7 @@ std::string to_string(int indent_level, AstModule *node)
     return result;
 }
 
-std::string to_string(int indent_level, AstReturn *node)
+std::string to_string(int indent_level, AstReturnStatement *node)
 {
     std::string result;
 
@@ -182,14 +184,14 @@ std::string dump_node(int indent_level, AstNode *node)
         case AstKind::binary_operator:     return to_string(indent_level, static_cast<AstBinaryOperator *>(node));
         case AstKind::block:               return to_string(indent_level, static_cast<AstBlock *>(node));
         case AstKind::declaration:         return to_string(indent_level, static_cast<AstDeclaration *>(node));
-        case AstKind::if_statement:        return to_string(indent_level, static_cast<AstIf *>(node));
+        case AstKind::if_statement:        return to_string(indent_level, static_cast<AstIfStatement *>(node));
         case AstKind::identifier:          return to_string(indent_level, static_cast<AstIdentifier *>(node));
         case AstKind::literal:             return to_string(indent_level, static_cast<AstLiteral *>(node));
         case AstKind::procedure:           return to_string(indent_level, static_cast<AstProcedure *>(node));
         case AstKind::procedure_call:      return to_string(indent_level, static_cast<AstProcedureCall *>(node));
         case AstKind::procedure_signature: return to_string(indent_level, static_cast<AstProcedureSignature *>(node));
         case AstKind::module:              return to_string(indent_level, static_cast<AstModule *>(node));
-        case AstKind::return_statement:    return to_string(indent_level, static_cast<AstReturn *>(node));
+        case AstKind::return_statement:    return to_string(indent_level, static_cast<AstReturnStatement *>(node));
         case AstKind::type_identifier:     return to_string(indent_level, static_cast<AstTypeIdentifier *>(node));
         default:                           assert(false);
     }

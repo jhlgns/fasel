@@ -23,6 +23,7 @@ set(shared_source_files
     jit.cpp
     lex.cpp
     memory_pool.cpp
+    node.cpp
     parse.cpp
     string_util.cpp
     stringify.cpp

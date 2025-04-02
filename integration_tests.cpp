@@ -35,6 +35,11 @@ TEST_CASE("Integration tests", "[integration]")
             continue;
         }
 
+        // if (it->path().string().ends_with("000-basics.fsl") == false)
+        // {
+        //     continue;
+        // }
+
         SECTION(it->path().string())
         {
             defer
@@ -62,7 +67,6 @@ TEST_CASE("Integration tests", "[integration]")
 
             auto required_output = comment.substr(begin, end - begin);
 
-            // 1. Parsing
             AstModule module{};
             if (parse_module(source.value(), module) == false)
             {
@@ -70,12 +74,26 @@ TEST_CASE("Integration tests", "[integration]")
                 REQUIRE(false);
             }
 
-            // 2. Typechecking
             Context ctx{};
-            TypeChecker type_checker{ctx};
-            auto module_node = node_cast<ModuleNode>(type_checker.make_node(&module));
+            NodeConverter node_converter{ctx};
+            auto module_node = node_cast<ModuleNode>(node_converter.make_node(&module));
 
-            if (type_checker.typecheck(module_node) == false)
+            DeclarationRegistrar registrar{ctx};
+            registrar.register_declarations(module_node);
+            if (registrar.has_error())
+            {
+                std::cout << "Semantic analysis failed:" << std::endl;  // TODO
+                for (const auto &error : registrar.errors)
+                {
+                    std::cout << error << std::endl;
+                }
+
+                REQUIRE(false);
+            }
+
+            TypeChecker type_checker{ctx};
+            type_checker.typecheck(module_node);
+            if (type_checker.errors.empty() == false)
             {
                 std::cout << "Typechecking failed:" << std::endl;
                 for (const auto &error : type_checker.errors)
@@ -86,11 +104,9 @@ TEST_CASE("Integration tests", "[integration]")
                 REQUIRE(false);
             }
 
-            // 3. Compile to IR
             auto compilation_result = compile_to_ir(module_node);
             compilation_result.module->print(llvm::outs(), nullptr);
 
-            // 4. Run JIT
             Jit jit{};
             jit.add_module(std::move(compilation_result.context), std::move(compilation_result.module));
             auto main_address = jit.get_symbol_address("main");

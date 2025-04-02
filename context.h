@@ -11,9 +11,13 @@ struct Context
 
     BinaryOperatorNode *make_binary_operator(TokenType operator_kind, Node *lhs, Node *rhs);
     BlockNode *make_block(BlockNode *parent_block, std::vector<Node *> statements);
-    DeclarationNode *make_declaration(std::string_view identifier, Node *specified_type, Node *init_expression);
+    DeclarationNode *make_declaration(
+        std::string_view identifier,
+        Node *specified_type,
+        Node *init_expression,
+        bool is_procedure_argument);
     IdentifierNode *make_identifier(std::string_view identifier);
-    IfNode *make_if(Node *condition, BlockNode *then_block, BlockNode *else_block);
+    IfStatementNode *make_if(Node *condition, BlockNode *then_block, BlockNode *else_block);
     WhileLoopNode *make_while(Node *condition, BlockNode *block);
     BreakStatementNode *make_break();
     ContinueStatementNode *make_continue();
@@ -32,10 +36,10 @@ struct Context
         std::vector<DeclarationNode *> arguments,
         bool is_vararg,
         Node *return_type);
-    ReturnNode *make_return(Node *expression);
-    GotoNode *make_goto(std::string_view label_identifier);
+    ReturnStatementNode *make_return(Node *expression);
+    GotoStatementNode *make_goto(std::string_view label_identifier);
     LabelNode *make_label(std::string_view identifier);
-    TypeCastNode *make_type_cast(Node *type, Node *expression);
+    TypeCastNode *make_type_cast(Node *target_type, Node *expression);
     BasicTypeNode *make_basic_type(BasicTypeNode::Kind kind, int64_t size);
     PointerTypeNode *make_pointer_type(Node *target_type);
     ArrayTypeNode *make_array_type(Node *length, Node *element_type); // StructTypeNode *make_struct_type();

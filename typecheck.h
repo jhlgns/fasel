@@ -5,45 +5,51 @@
 
 struct AstNode;
 
-bool types_equal(const Node *lhs, const Node *rhs);
-std::string type_to_string(const Node *type);
-
-struct TypeChecker
+struct NodeConverter
 {
-    explicit TypeChecker(Context &context)
-        : ctx(context)
+    Context &ctx;
+    BlockNode *current_block{};
+
+    explicit NodeConverter(Context &ctx)
+        : ctx{ctx}
     {
     }
 
+    Node *make_node(AstNode *ast);
+};
+
+struct DeclarationRegistrar : NodeVisitorBase
+{
     Context &ctx;
-    ProcedureNode *current_procedure{};
+
+    explicit DeclarationRegistrar(Context &ctx)
+        : ctx{ctx}
+    {
+    }
+
+    void register_declarations(ModuleNode *node);
+    void visit(DeclarationNode *declaration) override;
+    void visit(LabelNode *label) override;
+    void visit(ProcedureNode *procedure) override;
+};
+
+struct TypeChecker
+{
+    Context &ctx;
+    ProcedureNode *current_procedure{};  // TODO: Implement a node stack and do a upward search
     BlockNode *current_block{};
     std::vector<std::string> errors{};
 
-    Node *make_node(AstNode *ast);
-    [[nodiscard]] bool typecheck(Node *node);
+    explicit TypeChecker(Context &context)
+        : ctx{context}
+    {
+    }
 
-    void error(const Node *node, std::string_view message);
-};
+    bool do_implicit_cast_if_necessary(Node *&node, Node *type);
+    Node *coerce_types(BinaryOperatorNode *bin_op);
+    void typecheck(Node *node);
+    void typecheck_internal(Node *node);
+    bool typecheck_and_spread_poison(Node *node, Node *parent);
 
-struct BuiltinTypes
-{
-    static BasicTypeNode voyd;
-    static BasicTypeNode i64;
-    static BasicTypeNode i32;
-    static BasicTypeNode i16;
-    static BasicTypeNode i8;
-    static BasicTypeNode u64;
-    static BasicTypeNode u32;
-    static BasicTypeNode u16;
-    static BasicTypeNode u8;
-    static BasicTypeNode f32;
-    static BasicTypeNode f64;
-    static BasicTypeNode boolean;
-    static BasicTypeNode type;
-    static BasicTypeNode label;
-    static PointerTypeNode string_literal;
-    static ProcedureSignatureNode main_signature;
-
-    static const std::vector<std::tuple<BasicTypeNode *, std::string_view>> type_names;
+    void error(Node *node, bool poison, std::string_view message);
 };

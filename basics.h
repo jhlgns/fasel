@@ -9,7 +9,7 @@ template<typename F>
 struct ScopeExit
 {
     F f;
-    ScopeExit(F f)
+    explicit ScopeExit(F f)
         : f(f)
     {
     }
@@ -21,14 +21,34 @@ struct DEFER_TAG
 };
 
 template<class F>
-ScopeExit<F> operator+(DEFER_TAG, F &&f)
+ScopeExit<F> operator+(DEFER_TAG /*unused*/, F &&f)
 {
     return ScopeExit<F>{std::forward<F>(f)};
 }
 
-#define DEFER_1(x, y) x##y
-#define DEFER_2(x, y) DEFER_1(x, y)
-#define defer auto DEFER_2(ScopeExit, __LINE__) = DEFER_TAG{} + [&]()
+#define CONCAT_1(x, y) x##y
+#define CONCAT_2(x, y) CONCAT_1(x, y)
+
+#define defer auto CONCAT_2(ScopeExit, __LINE__) = DEFER_TAG{} + [&]()
+
+template<typename T>
+struct TempSwap
+{
+    T &destination;
+    T old_value;
+
+    template<typename U>
+    explicit TempSwap(T &destination, U &&new_value)
+        : destination{destination}
+        , old_value{std::move(destination)}
+    {
+        destination = std::move(new_value);
+    }
+
+    ~TempSwap() { this->destination = std::move(this->old_value); }
+};
+
+#define SET_TEMPORARILY(variable, new_value) TempSwap CONCAT_2(TempSwap, __LINE__){variable, new_value};
 
 #define ENSURE(condition)                         \
     if (!(condition))                             \

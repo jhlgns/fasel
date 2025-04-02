@@ -29,7 +29,8 @@ Done
 
 test_output := proc(format: *i8, ...) void external
 
-main := proc() void {
+main := proc() void
+{
     a := 0
 
     test_output("Begin\n", a)
@@ -83,6 +84,4 @@ main := proc() void {
     }
 
     // test_output("xxx\n")
-
-    return
 }

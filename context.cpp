@@ -27,7 +27,11 @@ BlockNode *Context::make_block(BlockNode *parent_block, std::vector<Node *> stat
     return result;
 }
 
-DeclarationNode *Context::make_declaration(std::string_view identifier, Node *specified_type, Node *init_expression)
+DeclarationNode *Context::make_declaration(
+    std::string_view identifier,
+    Node *specified_type,
+    Node *init_expression,
+    bool is_procedure_argument)
 {
     assert(identifier.empty() == false);
     assert((specified_type != nullptr) || (init_expression != nullptr));
@@ -42,10 +46,11 @@ DeclarationNode *Context::make_declaration(std::string_view identifier, Node *sp
         init_expression = this->make_nop();
     }
 
-    auto result             = new (*this) DeclarationNode{};
-    result->identifier      = identifier;
-    result->specified_type  = specified_type;
-    result->init_expression = init_expression;
+    auto result                   = new (*this) DeclarationNode{};
+    result->identifier            = identifier;
+    result->specified_type        = specified_type;
+    result->init_expression       = init_expression;
+    result->is_procedure_argument = is_procedure_argument;
     return result;
 }
 
@@ -58,12 +63,12 @@ IdentifierNode *Context::make_identifier(std::string_view identifier)
     return result;
 }
 
-IfNode *Context::make_if(Node *condition, BlockNode *then_block, BlockNode *else_block)
+IfStatementNode *Context::make_if(Node *condition, BlockNode *then_block, BlockNode *else_block)
 {
     assert(condition != nullptr);
     assert(then_block != nullptr);
 
-    auto result        = new (*this) IfNode{};
+    auto result        = new (*this) IfStatementNode{};
     result->condition  = condition;
     result->then_block = then_block;
     result->else_block = else_block;
@@ -77,7 +82,7 @@ WhileLoopNode *Context::make_while(Node *condition, BlockNode *block)
 
     auto result       = new (*this) WhileLoopNode{};
     result->condition = condition;
-    result->block     = block;
+    result->body      = block;
     return result;
 }
 
@@ -208,23 +213,23 @@ ProcedureSignatureNode *Context::make_procedure_signature(
     return result;
 }
 
-ReturnNode *Context::make_return(Node *expression)
+ReturnStatementNode *Context::make_return(Node *expression)
 {
     if (expression == nullptr)
     {
         expression = this->make_nop();
     }
 
-    auto result        = new (*this) ReturnNode{};
+    auto result        = new (*this) ReturnStatementNode{};
     result->expression = expression;
     return result;
 }
 
-GotoNode *Context::make_goto(std::string_view label_identifier)
+GotoStatementNode *Context::make_goto(std::string_view label_identifier)
 {
     assert(label_identifier.empty() == false);
 
-    auto result              = new (*this) GotoNode{};
+    auto result              = new (*this) GotoStatementNode{};
     result->label_identifier = label_identifier;
 
     return result;
@@ -240,15 +245,15 @@ LabelNode *Context::make_label(std::string_view identifier)
     return result;
 }
 
-TypeCastNode *Context::make_type_cast(Node *type, Node *expression)
+TypeCastNode *Context::make_type_cast(Node *target_type, Node *expression)
 {
-    assert(type != nullptr);
+    assert(target_type != nullptr);
     assert(expression != nullptr);
     // TODO: assert is_type(type)... for all factory functions
 
-    auto result        = new (*this) TypeCastNode{};
-    result->type       = type;
-    result->expression = expression;
+    auto result         = new (*this) TypeCastNode{};
+    result->target_type = target_type;
+    result->expression  = expression;
     return result;
 }
 

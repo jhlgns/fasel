@@ -10,7 +10,7 @@
             "preLaunchTask": "build-debug",
             "name": "Debug compiler",
             "program": "${workspaceFolder}/build-debug/fasel",
-            "args": ["../test.fsl"],
+            "args": ["../generate_bogus_program.fsl"],
             "cwd": "${workspaceFolder}/build-debug"
         },
         {

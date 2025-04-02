@@ -131,7 +131,7 @@ namespace assertions
 
         void operator()(AstNode *node)
         {
-            auto yf = ast_cast<AstIf>(node);
+            auto yf = ast_cast<AstIfStatement>(node);
             REQUIRE(yf != nullptr);
 
             this->condition(yf->condition);
@@ -263,7 +263,7 @@ namespace assertions
 
         void operator()(AstNode *node)
         {
-            auto retyrn = ast_cast<AstReturn>(node);
+            auto retyrn = ast_cast<AstReturnStatement>(node);
             REQUIRE(retyrn != nullptr);
 
             this->expression(retyrn->expression);

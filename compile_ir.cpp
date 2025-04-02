@@ -1,6 +1,6 @@
 #include "compile_ir.h"
 
-#include "typecheck.h"
+#include "node.h"
 
 #include <llvm/ADT/StringRef.h>
 #include <llvm/IR/IRBuilder.h>
@@ -18,27 +18,31 @@ using namespace llvm;
 
 struct IrCompiler
 {
-    explicit IrCompiler(LLVMContext &llvm_context)
+    explicit IrCompiler(LLVMContext &llvm_context, Module &module)
         : llvm_context{llvm_context}
-        , module{std::make_unique<Module>("inmemory_temp_module", llvm_context)}
+        , module{module}
         , ir{llvm_context}
     {
     }
 
     LLVMContext &llvm_context;
-    std::unique_ptr<Module> module;
-    Function *current_function{};
-    ProcedureNode *current_procedure{};
-    BlockNode *current_block{};
-    BasicBlock *current_break_target{};  // Used for 'break'
-    BasicBlock *current_continue_target{};  // Used for 'continue'
+    Module &module;
     IRBuilder<llvm::NoFolder> ir;
     // IRBuilder<> ir;
+    BasicBlock *current_break_target{};
+    BasicBlock *current_continue_target{};
 
     void allocate_locals(BlockNode *block)
     {
         for (auto statement : block->statements)
         {
+            if (auto decl = node_cast<DeclarationNode>(statement))
+            {
+                auto type         = this->convert_type(decl->init_expression->inferred_type());
+                decl->named_value = this->ir.CreateAlloca(type, nullptr, decl->identifier);
+                continue;
+            }
+
             if (auto label = node_cast<LabelNode>(statement))
             {
                 label->block = BasicBlock::Create(this->llvm_context, std::format("{}_label_begin", label->identifier));
@@ -52,7 +56,7 @@ struct IrCompiler
                 continue;
             }
 
-            if (auto yf = node_cast<IfNode>(statement))
+            if (auto yf = node_cast<IfStatementNode>(statement))
             {
                 allocate_locals(yf->then_block);
 
@@ -66,14 +70,8 @@ struct IrCompiler
 
             if (auto whyle = node_cast<WhileLoopNode>(statement))
             {
-                allocate_locals(whyle->block);
+                allocate_locals(whyle->body);
                 continue;
-            }
-
-            if (auto decl = node_cast<DeclarationNode>(statement))
-            {
-                auto type         = this->convert_type(decl->init_expression->type);
-                decl->named_value = this->ir.CreateAlloca(type, nullptr, decl->identifier);
             }
         }
     }
@@ -152,7 +150,7 @@ struct IrCompiler
 
                 for (auto argument : signature->arguments)
                 {
-                    auto argument_type = this->convert_type(argument->init_expression->type);
+                    auto argument_type = this->convert_type(argument->init_expression->inferred_type());
                     argument_types.push_back(argument_type);
                 }
 
@@ -167,7 +165,7 @@ struct IrCompiler
 
     Value *generate_code(BinaryOperatorNode *bin_op)
     {
-        assert(types_equal(bin_op->lhs->type, bin_op->rhs->type));
+        assert(Node::types_equal(bin_op->lhs->inferred_type(), bin_op->rhs->inferred_type()));
 
         auto is_store = bin_op->operator_kind == Tt::assign;
 
@@ -182,9 +180,9 @@ struct IrCompiler
             return this->ir.CreateStore(rhs, lhs);
         }
 
-        assert(bin_op->type->kind == NodeKind::basic_type);
-        auto lhs_simple = node_cast<BasicTypeNode, true>(bin_op->lhs->type);
-        auto rhs_simple = node_cast<BasicTypeNode, true>(bin_op->rhs->type);
+        assert(bin_op->inferred_type()->kind == NodeKind::basic_type);
+        auto lhs_simple = node_cast<BasicTypeNode, true>(bin_op->lhs->inferred_type());
+        auto rhs_simple = node_cast<BasicTypeNode, true>(bin_op->rhs->inferred_type());
         assert(lhs_simple->type_kind == rhs_simple->type_kind);
 
         switch (lhs_simple->type_kind)
@@ -213,7 +211,7 @@ struct IrCompiler
                     case Tt::logical_and:           TODO;
                     case Tt::logical_or:            TODO;
 
-                    default: UNREACHED;
+                    default:                        UNREACHED;
                 }
 
                 break;
@@ -242,7 +240,7 @@ struct IrCompiler
                     case Tt::logical_and:           TODO;  // TODO: This should be handled by desugaring
                     case Tt::logical_or:            TODO;
 
-                    default: UNREACHED;
+                    default:                        UNREACHED;
                 }
 
                 break;
@@ -252,11 +250,11 @@ struct IrCompiler
             {
                 switch (bin_op->operator_kind)
                 {
-                    case Tt::asterisk: return this->ir.CreateFMul(lhs, rhs, "fmul");
-                    case Tt::slash:    return this->ir.CreateFDiv(lhs, rhs, "fdiv");
-                    case Tt::mod:      return this->ir.CreateFRem(lhs, rhs, "frem");
-                    case Tt::plus:     return this->ir.CreateFAdd(lhs, rhs, "fadd");
-                    case Tt::minus:    return this->ir.CreateFSub(lhs, rhs, "fsub");
+                    case Tt::asterisk:              return this->ir.CreateFMul(lhs, rhs, "fmul");
+                    case Tt::slash:                 return this->ir.CreateFDiv(lhs, rhs, "fdiv");
+                    case Tt::mod:                   return this->ir.CreateFRem(lhs, rhs, "frem");
+                    case Tt::plus:                  return this->ir.CreateFAdd(lhs, rhs, "fadd");
+                    case Tt::minus:                 return this->ir.CreateFSub(lhs, rhs, "fsub");
 
                     // TODO: Read more about ordered and unordered floating point comparisons
                     case Tt::equal:                 return this->ir.CreateFCmp(CmpInst::FCMP_OEQ, lhs, rhs, "foeq");
@@ -277,21 +275,16 @@ struct IrCompiler
 
     Value *generate_code(BlockNode *block)
     {
-        auto old_block      = this->current_block;
-        this->current_block = block;
-        defer
-        {
-            this->current_block = old_block;
-        };
-
         for (auto statement : block->statements)
         {
             this->generate_code(statement);
 
-            if (statement->kind == NodeKind::break_statement || statement->kind == NodeKind::continue_statement ||
-                statement->kind == NodeKind::return_statement)
+            auto is_terminator = statement->kind == NodeKind::break_statement ||
+                                 statement->kind == NodeKind::continue_statement ||
+                                 statement->kind == NodeKind::return_statement;
+            if (is_terminator)
             {
-                // TODO: It is weird that this has to be done, but the unconditional 'br' 
+                // TODO: It is weird that this has to be done, but the unconditional 'br'
                 // instruction seems to be ignored if there are other instructions following,
                 // for example after a loop break
                 break;
@@ -303,28 +296,32 @@ struct IrCompiler
 
     Value *generate_code(DeclarationNode *decl)
     {
+        if (decl->is_global() && decl->named_value != nullptr)
+        {
+            // Already compiled out of order
+            return nullptr;
+        }
+
         if (decl->init_expression->kind == NodeKind::procedure)
         {
             // TODO: Transform local procedure declarations to global ones
-            assert(this->current_block->is_global());
-            assert(this->current_function == nullptr);
-            assert(this->current_procedure == nullptr);
+            assert(decl->is_global());
+            // assert(this->ir.GetInsertBlock() == nullptr);
 
-            auto procedure          = node_cast<ProcedureNode, true>(decl->init_expression);
-            this->current_procedure = procedure;
+            auto procedure = node_cast<ProcedureNode, true>(decl->init_expression);
 
-            auto type              = this->convert_type(decl->init_expression->type);
-            auto function_type     = cast<FunctionType>(type);
-            this->current_function = Function::Create(
+            auto type          = this->convert_type(decl->init_expression->inferred_type());
+            auto function_type = cast<FunctionType>(type);
+            auto function      = Function::Create(
                 function_type,
                 GlobalValue::LinkageTypes::ExternalLinkage,
                 decl->identifier,
-                this->module.get());
+                this->module);
             decl->named_value =
-                this->current_function;  // NOTE: Must set the named_value before compiling the body to allow recursion
+                function;  // NOTE: Must set the named_value before compiling the body to allow recursion
 
             auto i = 0;
-            for (auto &arg : this->current_function->args())
+            for (auto &arg : function->args())
             {
                 arg.setName(procedure->signature->arguments[i]->identifier);
                 ++i;
@@ -332,19 +329,16 @@ struct IrCompiler
 
             if (procedure->is_external == false)
             {
-                auto block = BasicBlock::Create(this->llvm_context, "entry", this->current_function);
+                auto block = BasicBlock::Create(this->llvm_context, "entry", function);
                 this->ir.SetInsertPoint(block);  // TODO: Restore insert point when done?
                 this->generate_code(decl->init_expression);
             }
-
-            this->current_function  = nullptr;
-            this->current_procedure = nullptr;
 
             return nullptr;
         }
 
         // TODO: There are no global variables yet and they are not on the roadmap
-        ENSURE(this->current_block->is_global() == false);
+        ENSURE(decl->is_global() == false);
 
         // Declaration assignment to init expresion
         auto value = this->generate_code(decl->init_expression);
@@ -355,31 +349,32 @@ struct IrCompiler
 
     Value *generate_code(IdentifierNode *ident, bool is_store = false)
     {
-        auto type = this->convert_type(ident->type);
-        auto decl = this->current_block->find_declaration(ident->identifier);
+        auto type = this->convert_type(ident->inferred_type());
 
-        assert(decl->named_value != nullptr);
+        assert(ident->declaration->named_value != nullptr);
 
         if (is_store)
         {
-            return decl->named_value;
+            return ident->declaration->named_value;
         }
 
-        if (isa<Argument>(decl->named_value))
+        if (isa<Argument>(ident->declaration->named_value))
         {
-            return decl->named_value;
+            return ident->declaration->named_value;
         }
 
-        return this->ir.CreateLoad(type, decl->named_value, "load");
+        return this->ir.CreateLoad(type, ident->declaration->named_value, "load");
     }
 
-    Value *generate_code(IfNode *yf)
+    Value *generate_code(IfStatementNode *yf)
     {
         auto condition = this->generate_code(yf->condition);
 
+        auto function = this->ir.GetInsertBlock()->getParent();
+
         auto if_cond = this->ir.CreateICmpNE(condition, ConstantInt::get(this->ir.getInt1Ty(), 0), "if_cond");
 
-        auto then_block = BasicBlock::Create(this->llvm_context, "if_then", this->current_function);
+        auto then_block = BasicBlock::Create(this->llvm_context, "if_then", function);
         auto else_block = BasicBlock::Create(this->llvm_context, "if_else");
         auto done_block = BasicBlock::Create(this->llvm_context, "if_end");
 
@@ -393,7 +388,7 @@ struct IrCompiler
         }
         then_block = this->ir.GetInsertBlock();
 
-        this->current_function->insert(this->current_function->end(), else_block);
+        function->insert(function->end(), else_block);
         this->ir.SetInsertPoint(else_block);
         if (yf->else_block != nullptr)
         {
@@ -405,7 +400,7 @@ struct IrCompiler
         }
         else_block = this->ir.GetInsertBlock();
 
-        this->current_function->insert(this->current_function->end(), done_block);
+        function->insert(function->end(), done_block);
         this->ir.SetInsertPoint(done_block);
 
         // auto phi = this->ir.CreatePHI();   TODO: Continue here later for ternary
@@ -415,23 +410,14 @@ struct IrCompiler
 
     Value *generate_code(WhileLoopNode *whyle)
     {
-        auto head_block = BasicBlock::Create(this->llvm_context, "while_head", this->current_function);
-        auto body_block = BasicBlock::Create(this->llvm_context, "while_body", this->current_function);
-        auto done_block = BasicBlock::Create(this->llvm_context, "while_done", this->current_function);
+        auto function = this->ir.GetInsertBlock()->getParent();
 
-        auto old_break_target      = this->current_break_target;
-        this->current_break_target = done_block;
-        defer
-        {
-            this->current_break_target = old_break_target;
-        };
+        auto head_block = BasicBlock::Create(this->llvm_context, "while_head", function);
+        auto body_block = BasicBlock::Create(this->llvm_context, "while_body", function);
+        auto done_block = BasicBlock::Create(this->llvm_context, "while_done", function);
 
-        auto old_continue_target      = this->current_continue_target;
-        this->current_continue_target = head_block;
-        defer
-        {
-            this->current_continue_target = old_continue_target;
-        };
+        SET_TEMPORARILY(this->current_break_target, done_block);
+        SET_TEMPORARILY(this->current_continue_target, head_block);
 
         assert(this->ir.GetInsertBlock()->getTerminator() == nullptr);
         this->ir.CreateBr(head_block);
@@ -443,7 +429,7 @@ struct IrCompiler
         this->ir.CreateCondBr(while_cond, body_block, done_block);
 
         this->ir.SetInsertPoint(body_block);
-        this->generate_code(whyle->block);
+        this->generate_code(whyle->body);
 
         if (this->ir.GetInsertBlock()->getTerminator() == nullptr)
         {
@@ -476,7 +462,7 @@ struct IrCompiler
 
     Value *generate_code(LiteralNode *literal)
     {
-        auto basic_type = node_cast<BasicTypeNode>(literal->type);
+        auto basic_type = node_cast<BasicTypeNode>(literal->inferred_type());
 
         if (std::holds_alternative<uint64_t>(literal->value))
         {
@@ -510,49 +496,6 @@ struct IrCompiler
         }
 
         UNREACHED;
-
-#if 0
-        auto basic_type = node_cast<BasicTypeNode, true>(literal->type);
-        assert(basic_type != nullptr);  // TODO: Struct types will appear here
-
-        switch (basic_type->type_kind)
-        {
-            case BasicTypeNode::Kind::boolean:
-            {
-                auto value = std::get<bool>(literal->value);
-                return ConstantInt::get(this->ir.getInt1Ty(), value);
-            }
-
-            case BasicTypeNode::Kind::signed_integer:
-            case BasicTypeNode::Kind::unsigned_integer:
-            {
-                auto value = std::get<uint64_t>(literal->value);
-                return ConstantInt::get(IntegerType::get(this->llvm_context, basic_type->size * 8), value);
-            }
-
-            case BasicTypeNode::Kind::floatingpoint:
-            {
-                switch (basic_type->size)
-                {
-                    case 4:
-                    {
-                        auto value = std::get<float>(literal->value);
-                        return ConstantFP::get(this->llvm_context, APFloat{value});
-                    }
-
-                    case 8:
-                    {
-                        auto value = std::get<double>(literal->value);
-                        return ConstantFP::get(this->ir.getDoubleTy(), value);
-                    }
-
-                    default: UNREACHED;
-                }
-            }
-
-            default: TODO;
-        }
-#endif
     }
 
     Value *generate_code(ProcedureNode *proc)
@@ -561,7 +504,7 @@ struct IrCompiler
 
         for (auto arg : proc->signature->arguments)
         {
-            for (auto &the_arg : this->current_function->args())
+            for (auto &the_arg : this->ir.GetInsertBlock()->getParent()->args())
             {
                 if (StringRef{arg->identifier} == the_arg.getName())
                 {
@@ -581,13 +524,18 @@ struct IrCompiler
     Value *generate_code(ProcedureCallNode *call)
     {
         assert(call->procedure->kind == NodeKind::identifier);  // TODO: Function pointer calling
-        auto ident     = static_cast<IdentifierNode *>(call->procedure);
-        auto proc_decl = this->current_block->find_declaration(ident->identifier);
-        assert(
-            proc_decl->named_value !=
-            nullptr);  // TODO: Implement on-demand node compilation with something like ensure_compiled(Node *node)
-        assert(proc_decl->init_expression->kind == NodeKind::procedure);
-        auto proc = static_cast<ProcedureNode *>(proc_decl->init_expression);
+        auto ident = static_cast<IdentifierNode *>(call->procedure);
+
+        if (ident->declaration->named_value == nullptr)
+        {
+            // Compile on demand for out of order declarations
+            IrCompiler ir_compiler{this->llvm_context, this->module};
+            ir_compiler.generate_code(ident->declaration);
+            assert(ident->declaration->named_value != nullptr);
+        }
+
+        assert(ident->declaration->init_expression->kind == NodeKind::procedure);
+        auto proc = static_cast<ProcedureNode *>(ident->declaration->init_expression);
 
         auto type = cast<FunctionType>(this->convert_type(proc->signature));
 
@@ -603,15 +551,16 @@ struct IrCompiler
             auto return_basic = node_cast<BasicTypeNode>(proc->signature->return_type);
             if (return_basic->type_kind == BasicTypeNode::Kind::voyd)
             {
-                this->ir.CreateCall(type, proc_decl->named_value, arguments);
+                this->ir.CreateCall(type, ident->declaration->named_value, arguments);
                 return nullptr;
             }
         }
 
-        return this->ir.CreateCall(type, proc_decl->named_value, arguments, std::format("call_{}", ident->identifier));
+        return this->ir
+            .CreateCall(type, ident->declaration->named_value, arguments, std::format("call_{}", ident->identifier));
     }
 
-    Value *generate_code(ReturnNode *retyrn)
+    Value *generate_code(ReturnStatementNode *retyrn)
     {
         if (retyrn->expression->kind == NodeKind::nop)
         {
@@ -628,42 +577,42 @@ struct IrCompiler
     {
         TODO;
 
-        this->current_function->insert(this->current_function->end(), label->block);
-        this->current_function->insert(this->current_function->end(), label->after);
+        // this->current_function->insert(this->current_function->end(), label->block);
+        // this->current_function->insert(this->current_function->end(), label->after);
 
-        this->ir.SetInsertPoint(label->block);
-        this->ir.CreateBr(label->after);
-        this->ir.SetInsertPoint(label->block->begin());
+        // this->ir.SetInsertPoint(label->block);
+        // this->ir.CreateBr(label->after);
+        // this->ir.SetInsertPoint(label->block->begin());
 
-        return nullptr;
+        // return nullptr;
     }
 
-    Value *generate_code(GotoNode *gotoo)
+    Value *generate_code(GotoStatementNode *gotoo)
     {
         TODO;
 
-        auto decl = this->current_procedure->body->find_declaration(gotoo->label_identifier);
-        assert(decl != nullptr);
+        // auto decl = this->current_procedure->body->find_declaration(gotoo->label_identifier);
+        // assert(decl != nullptr);
 
-        auto label = node_cast<LabelNode, true>(decl->init_expression);
-        assert(label->block != nullptr);
+        // auto label = node_cast<LabelNode, true>(decl->init_expression);
+        // assert(label->block != nullptr);
 
-        this->ir.CreateBr(label->block);
+        // this->ir.CreateBr(label->block);
 
-        return nullptr;
+        // return nullptr;
     }
 
     Value *generate_code(TypeCastNode *cast)
     {
-        auto dest_basic_type = node_cast<BasicTypeNode, true>(cast->type);
-        auto src_basic_type  = node_cast<BasicTypeNode, true>(cast->expression->type);
+        auto dest_basic_type = node_cast<BasicTypeNode, true>(cast->inferred_type());
+        auto src_basic_type  = node_cast<BasicTypeNode, true>(cast->expression->inferred_type());
 
-        assert(dest_basic_type->type_kind == BasicTypeNode::Kind::floatingpoint);
+        // assert(dest_basic_type->type_kind == BasicTypeNode::Kind::floatingpoint);
 
         auto expression_value = this->generate_code(cast->expression);
         auto dest_type        = this->convert_type(dest_basic_type);
 
-        assert(dest_type->isFloatingPointTy());
+        // assert(dest_type->isFloatingPointTy());
 
         switch (src_basic_type->type_kind)
         {
@@ -673,6 +622,12 @@ struct IrCompiler
             {
                 switch (dest_basic_type->type_kind)
                 {
+                    case BasicTypeNode::Kind::signed_integer:
+                    {
+                        assert(src_basic_type->size != dest_basic_type->size);
+                        return this->ir.CreateIntCast(expression_value, dest_type, true, "intcast");
+                    }
+
                     case BasicTypeNode::Kind::floatingpoint:
                     {
                         return this->ir.CreateSIToFP(expression_value, dest_type, "itof");
@@ -731,22 +686,22 @@ struct IrCompiler
     {
         switch (node->kind)
         {
-            case NodeKind::binary_operator:    return this->generate_code(static_cast<BinaryOperatorNode *>(node));
-            case NodeKind::block:              return this->generate_code(static_cast<BlockNode *>(node));
-            case NodeKind::declaration:        return this->generate_code(static_cast<DeclarationNode *>(node));
-            case NodeKind::identifier:         return this->generate_code(static_cast<IdentifierNode *>(node), is_store);
-            case NodeKind::if_statement:       return this->generate_code(static_cast<IfNode *>(node));
-            case NodeKind::while_loop:         return this->generate_code(static_cast<WhileLoopNode *>(node));
-            case NodeKind::break_statement:    return this->generate_code(static_cast<BreakStatementNode *>(node));
-            case NodeKind::continue_statement: return this->generate_code(static_cast<ContinueStatementNode *>(node));
-            case NodeKind::literal:            return this->generate_code(static_cast<LiteralNode *>(node));
-            case NodeKind::module:             return this->generate_code(static_cast<ModuleNode *>(node)->block);
-            case NodeKind::procedure:          return this->generate_code(static_cast<ProcedureNode *>(node));
-            case NodeKind::procedure_call:     return this->generate_code(static_cast<ProcedureCallNode *>(node));
-            case NodeKind::return_statement:   return this->generate_code(static_cast<ReturnNode *>(node));
-            case NodeKind::goto_statement:              return this->generate_code(static_cast<GotoNode *>(node));
-            case NodeKind::label:              return this->generate_code(static_cast<LabelNode *>(node));
-            case NodeKind::type_cast:          return this->generate_code(static_cast<TypeCastNode *>(node));
+            case NodeKind::binary_operator:     return this->generate_code(static_cast<BinaryOperatorNode *>(node));
+            case NodeKind::block:               return this->generate_code(static_cast<BlockNode *>(node));
+            case NodeKind::declaration:         return this->generate_code(static_cast<DeclarationNode *>(node));
+            case NodeKind::identifier:          return this->generate_code(static_cast<IdentifierNode *>(node), is_store);
+            case NodeKind::if_statement:        return this->generate_code(static_cast<IfStatementNode *>(node));
+            case NodeKind::while_loop:          return this->generate_code(static_cast<WhileLoopNode *>(node));
+            case NodeKind::break_statement:     return this->generate_code(static_cast<BreakStatementNode *>(node));
+            case NodeKind::continue_statement:  return this->generate_code(static_cast<ContinueStatementNode *>(node));
+            case NodeKind::literal:             return this->generate_code(static_cast<LiteralNode *>(node));
+            case NodeKind::module:              return this->generate_code(static_cast<ModuleNode *>(node)->block);
+            case NodeKind::procedure:           return this->generate_code(static_cast<ProcedureNode *>(node));
+            case NodeKind::procedure_call:      return this->generate_code(static_cast<ProcedureCallNode *>(node));
+            case NodeKind::return_statement:    return this->generate_code(static_cast<ReturnStatementNode *>(node));
+            case NodeKind::goto_statement:      return this->generate_code(static_cast<GotoStatementNode *>(node));
+            case NodeKind::label:               return this->generate_code(static_cast<LabelNode *>(node));
+            case NodeKind::type_cast:           return this->generate_code(static_cast<TypeCastNode *>(node));
 
             case NodeKind::array_type:          UNREACHED;
             case NodeKind::nop:                 UNREACHED;
@@ -765,9 +720,10 @@ IrCompilationResult::~IrCompilationResult() = default;
 IrCompilationResult compile_to_ir(struct Node *node)
 {
     auto llvm_context = std::make_unique<LLVMContext>();
+    auto module       = std::make_unique<Module>("inmemory_temp_module", *llvm_context);
 
-    IrCompiler ir_compiler{*llvm_context};
+    IrCompiler ir_compiler{*llvm_context, *module};
     ir_compiler.generate_code(node);
 
-    return IrCompilationResult{std::move(llvm_context), std::move(ir_compiler.module)};
+    return IrCompilationResult{std::move(llvm_context), std::move(module)};
 }

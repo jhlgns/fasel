@@ -28,7 +28,7 @@ enum class AstKind
     type_identifier,
 };
 
-inline const char *to_string(AstKind kind)
+inline std::string_view to_string(AstKind kind)
 {
     switch (kind)
     {
@@ -97,6 +97,7 @@ TNode *ast_cast(AstNode *node)
     return static_cast<TNode *>(node);
 }
 
+// TODO: Remove this node and replace it with AstIdentifier
 struct AstTypeIdentifier : AstOfKind<AstKind::type_identifier>
 {
     Token identifier{};
@@ -118,6 +119,7 @@ struct AstDeclaration : AstOfKind<AstKind::declaration>
     Token identifier{};
     AstNode *type{};
     AstNode *init_expression{};
+    bool is_procedure_argument{};
 };
 
 struct AstBinaryOperator : AstOfKind<AstKind::binary_operator>
@@ -132,7 +134,7 @@ struct AstLabel : AstOfKind<AstKind::label>
     std::string_view identifier{};
 };
 
-struct AstGoto : AstOfKind<AstKind::goto_statement>
+struct AstGotoStatement : AstOfKind<AstKind::goto_statement>
 {
     std::string_view label_identifier{};
 };
@@ -157,7 +159,7 @@ struct AstBlock : AstOfKind<AstKind::block>
     std::vector<AstNode *> statements{};
 };
 
-struct AstIf : AstOfKind<AstKind::if_statement>
+struct AstIfStatement : AstOfKind<AstKind::if_statement>
 {
     AstNode *condition{};
     AstBlock then_block{};
@@ -178,7 +180,7 @@ struct AstContinueStatement : AstOfKind<AstKind::continue_statement>
 {
 };
 
-struct AstReturn : AstOfKind<AstKind::return_statement>
+struct AstReturnStatement : AstOfKind<AstKind::return_statement>
 {
     AstNode *expression{};
 };

@@ -10,6 +10,7 @@
 
 struct Parser
 {
+    // TODO: operator new(size_t, Parser &) and then allocate all AST nodes with the memory pool
     explicit Parser(const Lexer &lexer)
         : lexer{lexer}
     {
@@ -144,7 +145,7 @@ Parser parse_statement(Parser p, AstNode *&out_statement)
     {
         p.arm("parsing if statement");
 
-        AstIf yf{};
+        AstIfStatement yf{};
 
         if (!(p >>= parse_expr(p, yf.condition)))
         {
@@ -168,7 +169,7 @@ Parser parse_statement(Parser p, AstNode *&out_statement)
             yf.else_block = new AstBlock{std::move(else_block)};
         }
 
-        out_statement = new AstIf{std::move(yf)};
+        out_statement = new AstIfStatement{std::move(yf)};
         return p;
     }
 
@@ -208,10 +209,10 @@ Parser parse_statement(Parser p, AstNode *&out_statement)
     {
         p.arm("parsing return statement");
 
-        AstReturn retyrn{};
+        AstReturnStatement retyrn{};
         p >>= parse_expr(p.quiet(), retyrn.expression);  // Empty return for void
 
-        out_statement = new AstReturn{std::move(retyrn)};
+        out_statement = new AstReturnStatement{std::move(retyrn)};
         return p;
     }
 
@@ -241,7 +242,7 @@ Parser parse_statement(Parser p, AstNode *&out_statement)
             return start;
         }
 
-        auto result              = new AstGoto{};
+        auto result              = new AstGotoStatement{};
         result->label_identifier = identifier.text();
         out_statement            = result;
         return p;
@@ -352,6 +353,7 @@ Parser parse_proc_signature(Parser p, AstProcedureSignature &out_signature)
             return start;
         }
 
+        arg.is_procedure_argument = true;
         out_signature.arguments.push_back(std::move(arg));
 
         if (!(p >>= p.quiet().parse_token(Tt::comma)))

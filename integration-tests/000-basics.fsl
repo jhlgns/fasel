@@ -13,7 +13,8 @@ With type
 
 test_output := proc(format: *i8, ...) void external
 
-main := proc() void {
+main := proc() void
+{
     a := 1
     test_output("a = %d\n", a)
 
@@ -32,5 +33,5 @@ main := proc() void {
 
     test_output("\0%s\n", string_var)  // Should not output anything
 
-    return
+    return  // 'return' statement is optional for void functions
 }

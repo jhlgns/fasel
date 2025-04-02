@@ -24,7 +24,7 @@ int main(int argc, char **argv)
     std::cout << "Compiling file: " << path << std::endl;
 
     auto source_file = read_file_as_string(path);
-    if (source_file.has_value())
+    if (source_file.has_value() == false)
     {
         std::cerr << "Failed to read source file" << std::endl;
         return 1;
@@ -45,7 +45,6 @@ int main(int argc, char **argv)
     }
 #endif
 
-    // 1. Parsing
     AstModule module{};
     if (parse_module(source, module) == false)
     {
@@ -53,12 +52,27 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // 2. Typechecking
     Context ctx{};
-    TypeChecker type_checker{ctx};
-    auto module_node = node_cast<ModuleNode>(type_checker.make_node(&module));
 
-    if (type_checker.typecheck(module_node) == false)
+    NodeConverter node_converter{ctx};
+    auto module_node = node_cast<ModuleNode>(node_converter.make_node(&module));
+
+    DeclarationRegistrar registrar{ctx};
+    registrar.register_declarations(module_node);
+    if (registrar.has_error())
+    {
+        std::cout << "Semantic analysis failed:" << std::endl;  // TODO
+        for (const auto &error : registrar.errors)
+        {
+            std::cout << error << std::endl;
+        }
+
+        return 1;
+    }
+
+    TypeChecker type_checker{ctx};
+    type_checker.typecheck(module_node);
+    if (type_checker.errors.empty() == false)
     {
         std::cout << "Typechecking failed:" << std::endl;
         for (const auto &error : type_checker.errors)
@@ -75,11 +89,9 @@ int main(int argc, char **argv)
     //               << std::endl;
     // }
 
-    // 3. Compile to IR
     auto compilation_result = compile_to_ir(module_node);
     compilation_result.module->print(llvm::outs(), nullptr);
 
-    // 4. Run JIT
     Jit jit{};
     jit.add_module(std::move(compilation_result.context), std::move(compilation_result.module));
     auto main_address = jit.get_symbol_address("main");

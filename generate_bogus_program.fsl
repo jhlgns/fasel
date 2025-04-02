@@ -1,0 +1,65 @@
+time := proc(xxx: i64) u32 external
+srand := proc(seed: u32) void external
+rand := proc() i32 external
+printf := proc(format: *i8, ...) i32 external
+
+main := proc() void
+{
+    srand(time(0))
+
+    while true {
+        // printf("%d\n", rand())
+        if rand() % 100 > 98 break
+
+        value := rand() % 100
+
+        length := rand() % 10 + 5
+        i := 0
+        while i < length {
+            printf("%c", (rand() % 26 + 97))
+            i = i + 1
+        }
+        printf(" := proc() {\n")
+
+        if value > 0 if value <= 10 {
+            printf("    if ") expr() printf(" {\n")
+            printf("        // ...\n")
+            printf("    }\n")
+        } else if value < 20 {
+            printf("    while y {\n")
+            printf("        // ...\n")
+            printf("    }\n")
+        }
+
+        printf("}\n")
+    }
+
+    return
+}
+
+do_indent := proc(level: i64) void
+{
+    i := 0
+    while i < level * 4 {
+        printf(" ")
+        i = i + 1
+    }
+    return
+}
+
+expr := proc() void
+{
+    value := rand() % 30
+
+    if value > 0 if value < 10 {
+        // Binary operator
+        expr() printf(" + ") expr()
+        return
+    } else if value < 20 {
+        // TODO
+        // return
+    } else {
+        // Numerical literal
+        printf("%d", rand())  // TODO: Specifier
+    }
+}

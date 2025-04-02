@@ -13,11 +13,11 @@ Here are some characteristics that make up this language:
 * Manual memory management somewhere inbetween C and C++
 * Imperative (no OOP, more focus on [DOD (data oriented design)](https://en.wikipedia.org/wiki/Data-oriented_design))
 * Go-like syntax (but different) that is easy to parse by humans and compilers (I guess [LL(1)](https://en.wikipedia.org/wiki/LL_parser))
-* Statically typed (at the moment there is no type checking and every variable is assumed to be of type i64)
+* Statically typed with fewer implicit casts than other languages [sic]
 * There will be multiple backends for the execution like building standalone executables, just-in-time compilation and potentially a custom stack machine.
 
 Some notes:
-* No LLM was used to write this code
+* This code was written without LLMs and will continue to do so forever - more on the reasons for this later
 
 ## The Pipeline - How It Will Work Roughly
 
