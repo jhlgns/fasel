@@ -149,8 +149,16 @@ struct DeclarationNode : NodeOfKind<NodeKind::declaration>
 
 struct BlockNode : NodeOfKind<NodeKind::block>
 {
+    enum CompilerErrorKind
+    {
+        none,
+        declaration,
+        typecheck,
+    };
+
     std::vector<Node *> statements{};
     BlockNode *parent_block{};
+    CompilerErrorKind expected_compiler_error_kind{};
 
     std::unordered_map<std::string, DeclarationNode *> declarations{};
 
@@ -341,6 +349,7 @@ struct NodeVisitorBase
     inline virtual void visit(BasicTypeNode *basic_type) { }
     inline virtual void visit(BinaryOperatorNode *binary_operator) { }
     inline virtual void visit(BlockNode *block) { }
+    inline virtual void visit_done(BlockNode *block) { }
     inline virtual void visit(BreakStatementNode *break_statement) { }
     inline virtual void visit(ContinueStatementNode *continue_statement) { }
     inline virtual void visit(DeclarationNode *declaration) { }
@@ -427,6 +436,8 @@ inline void visit(Node *node, NodeVisitorBase &visitor)
         {
             visit(statement, visitor);
         }
+
+        visitor.visit_done(block);
 
         return;
     }

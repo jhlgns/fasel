@@ -10,14 +10,13 @@ enum class AstKind
     array_type,
     binary_operator,
     block,
-    declaration,
-    identifier,
-    if_statement,
-    while_loop,
     break_statement,
     continue_statement,
-    label,
+    declaration,
     goto_statement,
+    identifier,
+    if_statement,
+    label,
     literal,
     module,
     pointer_type,
@@ -26,6 +25,7 @@ enum class AstKind
     procedure_signature,
     return_statement,
     type_identifier,
+    while_loop,
 };
 
 inline std::string_view to_string(AstKind kind)
@@ -155,8 +155,16 @@ struct AstProcedureSignature : AstOfKind<AstKind::procedure_signature>
 
 struct AstBlock : AstOfKind<AstKind::block>
 {
-    bool is_proc_body{};
+    enum CompilerErrorKind
+    {
+        none,
+        declaration,
+        typecheck,
+    };
+
     std::vector<AstNode *> statements{};
+    bool is_compiler_error_block{};
+    CompilerErrorKind expected_compiler_error_kind{};
 };
 
 struct AstIfStatement : AstOfKind<AstKind::if_statement>

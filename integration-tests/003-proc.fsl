@@ -21,7 +21,18 @@ main := proc() void
     test_output("%f\n", a(123, 456f, false))
     test_output("%d\n", one())
     defined_after_main()
-    return
+
+    __error("typecheck") {
+        a(123, 456, false)  // NOTE: No implicit casts done (yet!)
+    }
+
+    __error("typecheck") {
+        defined_after_main("Something")
+    }
+
+    __error("typecheck") {
+        test_output(/* Nothing */)
+    }
 }
 
 defined_after_main := proc() void

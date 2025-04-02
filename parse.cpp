@@ -129,6 +129,7 @@ Parser parse_expr(Parser p, AstNode *&out_expr);
 Parser parse_decl(Parser p, AstDeclaration &out_decl);
 Parser parse_block(Parser p, AstBlock &out_block, bool allow_raw_statement);
 Parser parse_type(Parser p, AstNode *&out_type);
+Parser parse_compiler_error_block(Parser p, AstBlock &out_block);
 
 Parser parse_statement(Parser p, AstNode *&out_statement)
 {
@@ -248,17 +249,23 @@ Parser parse_statement(Parser p, AstNode *&out_statement)
         return p;
     }
 
-    AstNode *expr{};
-    if (p >>= parse_expr(p.quiet(), expr))
-    {
-        out_statement = expr;
-        return p;
-    }
-
     AstBlock block{};
     if (p >>= parse_block(p.quiet(), block, false))
     {
         out_statement = new AstBlock{std::move(block)};
+        return p;
+    }
+
+    if (p >>= parse_compiler_error_block(p.quiet(), block))
+    {
+        out_statement = new AstBlock{std::move(block)};
+        return p;
+    }
+
+    AstNode *expr{};
+    if (p >>= parse_expr(p.quiet(), expr))
+    {
+        out_statement = expr;
         return p;
     }
 
@@ -302,6 +309,61 @@ Parser parse_block(Parser p, AstBlock &out_block, bool allow_raw_statement)
         }
 
         out_block.statements.push_back(statement);
+    }
+
+    return p;
+}
+
+Parser parse_compiler_error_block(Parser p, AstBlock &out_block)
+{
+    auto start = p;
+
+    Token token{};
+    if (!(p >>= p.quiet().parse_token(Tt::identifier, &token)) || token.text() != "__error")
+    {
+        return start;
+    }
+
+    p.arm("parsing compiler error block");
+
+    if (!(p >>= p.quiet().parse_token(Tt::parenthesis_open)))
+    {
+        return start;
+    }
+
+    Token mode_token{};
+    if (!(p >>= p.quiet().parse_token(Tt::string_literal, &mode_token)))
+    {
+        return start;
+    }
+
+    assert(mode_token.text().size() >= 2);
+    auto mode = mode_token.text().substr(1, mode_token.text().size() - 2);
+
+    if (mode == "declaration")
+    {
+        out_block.expected_compiler_error_kind = AstBlock::CompilerErrorKind::declaration;
+    }
+    else if (mode == "typecheck")
+    {
+        out_block.expected_compiler_error_kind = AstBlock::CompilerErrorKind::typecheck;
+    }
+    else
+    {
+        p.error(start, std::format("Expected the mode to be either 'declaration' or 'typecheck' , got '{}'", mode));
+        return start;
+    }
+
+    if (!(p >>= p.quiet().parse_token(Tt::parenthesis_close)))
+    {
+        return start;
+    }
+
+    out_block.is_compiler_error_block = true;
+
+    if (!(p >>= parse_block(p, out_block, false)))
+    {
+        return start;
     }
 
     return p;
@@ -389,7 +451,6 @@ Parser parse_proc(Parser p, AstProcedure &out_proc)
         return p;
     }
 
-    out_proc.body.is_proc_body = true;
     if (!(p >>= parse_block(p, out_proc.body, true)))  // TODO: allow_raw_statement?...
     {
         return start;

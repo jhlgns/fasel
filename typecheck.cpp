@@ -91,6 +91,8 @@ Node *NodeConverter::make_node(AstNode *ast)
             auto block = static_cast<AstBlock *>(ast);
 
             auto result = this->ctx.make_block(this->current_block, {});
+            result->expected_compiler_error_kind =
+                static_cast<BlockNode::CompilerErrorKind>(block->expected_compiler_error_kind);
 
             SET_TEMPORARILY(this->current_block, result);
 
@@ -316,6 +318,13 @@ void DeclarationRegistrar::register_declarations(ModuleNode *node)
     ::visit(node, *this);
 }
 
+// void DeclarationRegistrar::visit_done(BlockNode *block)
+// {
+//     if (block->expected_compiler_error_kind == BlockNode::CompilerErrorKind::declaration)
+//     {
+//     }
+// }
+
 // Registers the declaration inside the current block
 void DeclarationRegistrar::visit(DeclarationNode *declaration)
 {
@@ -376,6 +385,11 @@ void DeclarationRegistrar::visit(ProcedureNode *procedure)
     }
 }
 
+// void DeclarationRegistrar::error(const Node *node, std::string_view message)
+// {
+//     NodeVisitorBase::error(node, message);
+// }
+
 //
 // TypeChecker
 //
@@ -409,6 +423,16 @@ bool TypeChecker::do_implicit_cast_if_necessary(Node *&node, Node *type)
         auto cast = this->ctx.make_type_cast(type, node);
         cast->set_inferred_type(type);
         node = cast;
+    }
+    else
+    {
+        this->error(
+            node,
+            node->inferred_type() == nullptr,
+            std::format(
+                "Invalid implicit cast from expression of type {} to type {}",
+                Node::type_to_string(node->inferred_type()),
+                Node::type_to_string(type)));
     }
 
     return can_cast;
@@ -475,12 +499,14 @@ Node *TypeChecker::coerce_types(BinaryOperatorNode *bin_op)
 
     if (this->do_implicit_cast_if_necessary(bin_op->lhs, type) == false)
     {
-        UNREACHED;
+        spread_poison(bin_op->lhs, bin_op);
+        return &BuiltinTypes::poison;
     }
 
     if (this->do_implicit_cast_if_necessary(bin_op->rhs, type) == false)
     {
-        UNREACHED;
+        spread_poison(bin_op->rhs, bin_op);
+        return &BuiltinTypes::poison;
     }
 
     return type;
@@ -534,11 +560,7 @@ void TypeChecker::typecheck_internal(Node *node)
                 case BinaryOperatorCategory::arithmetic:
                 {
                     auto coerced_type = this->coerce_types(bin_op);
-
-                    if (Node::types_equal(coerced_type, &BuiltinTypes::poison) == false)
-                    {
-                        bin_op->set_inferred_type(coerced_type);
-                    }
+                    bin_op->set_inferred_type(coerced_type);
 
                     return;
                 }
@@ -646,9 +668,24 @@ void TypeChecker::typecheck_internal(Node *node)
 
             SET_TEMPORARILY(this->current_block, block);
 
+            auto num_errors_before = this->errors.size();
             for (auto statement : block->statements)
             {
                 this->typecheck(statement);
+            }
+
+            if (block->expected_compiler_error_kind == BlockNode::CompilerErrorKind::typecheck)
+            {
+                if (num_errors_before == this->errors.size())
+                {
+                    // TODO: Errors might occur somewhere else but here - we can only check
+                    // for typechecking errors for now
+                    this->error(block, false, "Expected an error but did not get one");
+                }
+                else
+                {
+                    this->errors.resize(num_errors_before);
+                }
             }
 
             return;

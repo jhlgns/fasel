@@ -34,6 +34,11 @@ struct IrCompiler
 
     void allocate_locals(BlockNode *block)
     {
+        if (block->expected_compiler_error_kind != BlockNode::CompilerErrorKind::none)
+        {
+            return;
+        }
+
         for (auto statement : block->statements)
         {
             if (auto decl = node_cast<DeclarationNode>(statement))
@@ -275,6 +280,11 @@ struct IrCompiler
 
     Value *generate_code(BlockNode *block)
     {
+        if (block->expected_compiler_error_kind != BlockNode::CompilerErrorKind::none)
+        {
+            return nullptr;
+        }
+
         for (auto statement : block->statements)
         {
             this->generate_code(statement);

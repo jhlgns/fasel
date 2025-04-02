@@ -28,9 +28,12 @@ struct DeclarationRegistrar : NodeVisitorBase
     }
 
     void register_declarations(ModuleNode *node);
+    // void visit_done(BlockNode *block) override;
     void visit(DeclarationNode *declaration) override;
     void visit(LabelNode *label) override;
     void visit(ProcedureNode *procedure) override;
+
+    // void error(const Node *node, std::string_view message);
 };
 
 struct TypeChecker

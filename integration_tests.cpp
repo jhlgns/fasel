@@ -19,9 +19,20 @@ static std::string current_test_output{};
 static int _init = []
 {
     register_integration_tests_sink(
-        [](std::string_view message)
+        [](TestEvent event)
         {
-            current_test_output += message;  //
+            if (std::holds_alternative<FailureTestEvent>(event))
+            {
+                REQUIRE(false);
+            }
+            else if (std::holds_alternative<OutputTestEvent>(event))
+            {
+                current_test_output += std::get<OutputTestEvent>(event).output;
+            }
+            else
+            {
+                UNREACHED;
+            }
         });
     return 1;
 }();

@@ -1,12 +1,21 @@
+#include "integration_tests_interop.h"
+
 #include <cstdarg>
 #include <cstdio>
 #include <functional>
-#include <vector>
 
-static std::vector<std::function<void(std::string_view)>> sinks{};
+static std::vector<std::function<void(TestEvent)>> sinks{};
 
 extern "C"
 {
+    void test_fail(const char *message)
+    {
+        for (const auto &sink : sinks)
+        {
+            sink(FailureTestEvent{});
+        }
+    }
+
     void test_output(const char *format, ...)
     {
         // TODO: Dynamic buffer size
@@ -20,12 +29,12 @@ extern "C"
 
         for (const auto &sink : sinks)
         {
-            sink(buffer);
+            sink(OutputTestEvent{buffer});
         }
     }
 }
 
-void register_integration_tests_sink(std::function<void(std::string_view)> callback)
+void register_integration_tests_sink(std::function<void(TestEvent)> callback)
 {
     sinks.push_back(std::move(callback));
 }

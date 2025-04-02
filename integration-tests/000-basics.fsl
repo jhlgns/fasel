@@ -1,10 +1,12 @@
 /*
 OUTPUT:
+1234789
+Hakuna matata
 a = 1
 a = 2
 a = 8
-1234789
-Hakuna matata
+a = 5
+a = 8
 With type
 */
 
@@ -15,23 +17,60 @@ test_output := proc(format: *i8, ...) void external
 
 main := proc() void
 {
+    test_output("%d\n", 1234789)
+    test_output("%s\n", "Hakuna matata")
+
     a := 1
     test_output("a = %d\n", a)
 
     a = 2
     test_output("a = %d\n", a)
 
-    a = a * 4
+    {
+        a = a * 4
+        test_output("a = %d\n", a)
+    }
+
+    {
+        a := 5
+        test_output("a = %d\n", a)
+    }
+
     test_output("a = %d\n", a)
-
-    test_output("%d\n", 1234789)
-
-    test_output("%s\n", "Hakuna matata")
 
     string_var: *i8 = "With type"
     test_output("%s\n", string_var)
 
     test_output("\0%s\n", string_var)  // Should not output anything
+
+    // The '__error("...") { ... }'-block is a special way of expecting something to fail compiling.
+    // It is used only for integration testing.
+
+    // TODO: Not implemented yet
+    // __error("declaration") {
+    //     a := 5
+    //     a: i32
+    // }
+
+    __error("typecheck") {
+        // Different signedness for arithmetic operators is intentionally unsupported
+        a: i32 = 1
+        b: u32 = 2
+        c := a + b
+    }
+
+    // Cannot change the type
+    { a := "" a = "right" }
+    __error("typecheck") { a := "" a = 2 }
+
+    // Invalid binary operator operand types
+    __error("typecheck") { a := 5 + true }
+    __error("typecheck") { a := "" + 1 }
+    __error("typecheck") { a := "" | 1 }
+    __error("typecheck") { a := 10 % "" }
+
+    // Not getting an expected error is also an error
+    __error("typecheck") { __error("typecheck") { right := 1 } }  
 
     return  // 'return' statement is optional for void functions
 }

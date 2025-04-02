@@ -27,6 +27,7 @@ Done
 5
 */
 
+test_fail := proc(message: *i8) void external
 test_output := proc(format: *i8, ...) void external
 
 main := proc() void
@@ -69,6 +70,8 @@ main := proc() void
         break
     }
 
+    while true break
+
     // TODO: Test trailing return
     // TODO: Test nested break and continue
 
@@ -83,5 +86,16 @@ main := proc() void
         continue
     }
 
-    // test_output("xxx\n")
+    // Condition must be boolean (no implicit casts are done)
+    __error("typecheck") {
+        while 0 test_fail("")
+    }
+
+    __error("typecheck") {
+        while "" test_fail("")
+    }
+
+    __error("typecheck") {
+        while 0f test_fail("")
+    }
 }
