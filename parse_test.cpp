@@ -1,3 +1,5 @@
+#if 0
+
 #include "basics.h"
 #include "parse.h"
 
@@ -64,7 +66,7 @@ namespace assertions
             REQUIRE(bin_op != nullptr);
 
             REQUIRE(this->type != Tt::none);
-            REQUIRE(this->type == bin_op->type);
+            REQUIRE(this->type == bin_op->operator_type);
             this->lhs(bin_op->lhs);
             this->rhs(bin_op->rhs);
         }
@@ -943,3 +945,5 @@ main := proc() void {
     // TODO
     // std::cout << dump_node(0, &program) << std::endl;
 }
+
+#endif

@@ -20,13 +20,13 @@ endif()
 set(shared_source_files
     compile_ir.cpp
     context.cpp
+    desugar.cpp
     jit.cpp
     lex.cpp
     memory_pool.cpp
     node.cpp
     parse.cpp
     string_util.cpp
-    stringify.cpp
     typecheck.cpp
     )
 

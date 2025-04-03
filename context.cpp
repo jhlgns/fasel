@@ -75,14 +75,20 @@ IfStatementNode *Context::make_if(Node *condition, BlockNode *then_block, BlockN
     return result;
 }
 
-WhileLoopNode *Context::make_while(Node *condition, BlockNode *block)
+WhileLoopNode *Context::make_while(Node *condition, BlockNode *block, Node *prologue)
 {
     assert(condition != nullptr);
     assert(block != nullptr);
 
+    if (prologue == nullptr)
+    {
+        prologue = this->make_nop();
+    }
+
     auto result       = new (*this) WhileLoopNode{};
     result->condition = condition;
     result->body      = block;
+    result->prologue  = prologue;
     return result;
 }
 
@@ -248,8 +254,9 @@ LabelNode *Context::make_label(std::string_view identifier)
 TypeCastNode *Context::make_type_cast(Node *target_type, Node *expression)
 {
     assert(target_type != nullptr);
+    assert(target_type->is_type());
     assert(expression != nullptr);
-    // TODO: assert is_type(type)... for all factory functions
+    assert(expression->is_type() == false);
 
     auto result         = new (*this) TypeCastNode{};
     result->target_type = target_type;
@@ -266,6 +273,7 @@ BasicTypeNode *Context::make_basic_type(BasicTypeNode::Kind kind, int64_t size)
 PointerTypeNode *Context::make_pointer_type(Node *target_type)
 {
     assert(target_type != nullptr);
+    assert(target_type->is_type());
 
     auto result         = new (*this) PointerTypeNode{};
     result->target_type = target_type;
@@ -276,6 +284,7 @@ ArrayTypeNode *Context::make_array_type(Node *length, Node *element_type)
 {
     assert(length != nullptr);
     assert(element_type != nullptr);
+    assert(element_type->is_type());
 
     auto result          = new (*this) ArrayTypeNode{};
     result->length       = length;

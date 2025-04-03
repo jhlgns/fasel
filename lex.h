@@ -107,37 +107,37 @@ inline int binary_operator_precedence(TokenType binop)
 {
     switch (binop)
     {
-        case Tt::asterisk: return 110;
-        case Tt::slash:    return 110;
-        case Tt::mod:      return 110;
+        case Tt::asterisk:              return 110;
+        case Tt::slash:                 return 110;
+        case Tt::mod:                   return 110;
 
-        case Tt::plus:  return 100;
-        case Tt::minus: return 100;
+        case Tt::plus:                  return 100;
+        case Tt::minus:                 return 100;
 
-        case Tt::left_shift:  return 90;
-        case Tt::right_shift: return 90;
+        case Tt::left_shift:            return 90;
+        case Tt::right_shift:           return 90;
 
         case Tt::less_than:             return 80;
         case Tt::greater_than:          return 80;
         case Tt::less_than_or_equal:    return 80;
         case Tt::greater_than_or_equal: return 80;
 
-        case Tt::equal:   return 70;
-        case Tt::inequal: return 70;
+        case Tt::equal:                 return 70;
+        case Tt::inequal:               return 70;
 
-        case Tt::bit_and: return 50;
+        case Tt::bit_and:               return 50;
 
-        case Tt::bit_xor: return 40;
+        case Tt::bit_xor:               return 40;
 
-        case Tt::bit_or: return 30;
+        case Tt::bit_or:                return 30;
 
-        case Tt::logical_and: return 20;
+        case Tt::logical_and:           return 20;
 
-        case Tt::logical_or: return 10;
+        case Tt::logical_or:            return 10;
 
-        case Tt::assign: return 5;
+        case Tt::assign:                return 5;
 
-        default: return 0;
+        default:                        return 0;
     }
 }
 
@@ -146,6 +146,8 @@ struct Cursor
     const char *at{};
     int line{};
     int line_offset{};
+
+    auto operator<=>(const Cursor &) const = default;
 };
 
 struct Token
@@ -168,6 +170,8 @@ struct Token
             default: return std::string{::to_string(this->type)};
         }
     }
+
+    auto operator<=>(const Token &) const = default;
 };
 
 struct Lexer

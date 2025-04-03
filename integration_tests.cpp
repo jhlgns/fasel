@@ -1,4 +1,5 @@
 #include "compile_ir.h"
+#include "desugar.h"
 #include "integration_tests_interop.h"
 #include "jit.h"
 #include "lex.h"
@@ -49,6 +50,11 @@ TEST_CASE("Integration tests", "[integration]")
             continue;
         }
 
+        if (it->path().extension() != ".fsl")
+        {
+            continue;
+        }
+
         // if (it->path().string().ends_with("000-basics.fsl") == false)
         // {
         //     continue;
@@ -81,16 +87,19 @@ TEST_CASE("Integration tests", "[integration]")
 
             auto required_output = comment.substr(begin, end - begin);
 
-            AstModule module{};
-            if (parse_module(source.value(), module) == false)
+            Context ctx{};
+
+            auto module = parse_module(source.value());
+            if (module == nullptr)
             {
                 std::cout << "Parsing failed" << std::endl;
                 REQUIRE(false);
             }
 
-            Context ctx{};
+            module = ast_cast<AstModule, true>(desugar(ctx.pool, module));
+
             NodeConverter node_converter{ctx};
-            auto module_node = node_cast<ModuleNode>(node_converter.make_node(&module));
+            auto module_node = node_cast<ModuleNode>(node_converter.make_node(module));
 
             DeclarationRegistrar registrar{ctx};
             registrar.register_declarations(module_node);
@@ -119,7 +128,7 @@ TEST_CASE("Integration tests", "[integration]")
             }
 
             auto compilation_result = compile_to_ir(module_node);
-            compilation_result.module->print(llvm::outs(), nullptr);
+            // compilation_result.module->print(llvm::outs(), nullptr);
 
             Jit jit{};
             jit.add_module(std::move(compilation_result.context), std::move(compilation_result.module));
@@ -129,10 +138,10 @@ TEST_CASE("Integration tests", "[integration]")
 
             main();
 
-            std::cout << "============================" << std::endl;
-            std::cout << "Got test output: " << std::endl;
-            std::cout << current_test_output << std::endl;
-            std::cout << "============================" << std::endl;
+            // std::cout << "============================" << std::endl;
+            // std::cout << "Got test output: " << std::endl;
+            // std::cout << current_test_output << std::endl;
+            // std::cout << "============================" << std::endl;
 
             REQUIRE(current_test_output == required_output);
         }

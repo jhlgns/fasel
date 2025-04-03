@@ -153,10 +153,13 @@ Parser parse_statement(Parser p, AstNode *&out_statement)
             return start;
         }
 
-        if (!(p >>= parse_block(p, yf.then_block, true)))
+        AstBlock then_block{};
+        if (!(p >>= parse_block(p, then_block, true)))
         {
             return start;
         }
+
+        yf.then_block = new AstBlock{std::move(then_block)};
 
         if (p >>= p.quiet().parse_keyword("else"))
         {
@@ -185,12 +188,80 @@ Parser parse_statement(Parser p, AstNode *&out_statement)
             return start;
         }
 
-        if (!(p >>= parse_block(p, whyle.block, true)))
+        AstBlock block{};
+        if (!(p >>= parse_block(p, block, true)))
         {
             return start;
         }
 
+        whyle.block = new AstBlock{std::move(block)};
+
         out_statement = new AstWhileLoop{std::move(whyle)};
+        return p;
+    }
+
+    if (p >>= p.quiet().parse_keyword("for"))
+    {
+        p.arm("parsing for loop");
+
+        AstForLoop foa{};
+
+        if (!(p >>= p.parse_token(Tt::identifier, &foa.identifier)))
+        {
+            return start;
+        }
+
+        if (!(p >>= p.quiet().parse_token(Tt::colon)))
+        {
+            if (!(p >>= parse_expr(p, foa.range_begin)))
+            {
+                return start;
+            }
+        }
+
+        if (!(p >>= p.parse_token(Tt::colon)))
+        {
+            return start;
+        }
+
+        foa.comparison_operator = p.next_token().type;
+        int64_t default_step{};
+
+        switch (foa.comparison_operator)
+        {
+            case Tt::less_than:             break;
+            case Tt::less_than_or_equal:    break;
+            case Tt::greater_than:          break;
+            case Tt::greater_than_or_equal: break;
+            default:
+            {
+                p.error(start, "Invalid range operator");
+                return start;
+            }
+        }
+
+        if (!(p >>= parse_expr(p, foa.range_end)))
+        {
+            return start;
+        }
+
+        if (p >>= p.quiet().parse_token(Tt::colon))
+        {
+            if (!(p >>= parse_expr(p, foa.step)))
+            {
+                return start;
+            }
+        }
+
+        AstBlock block{};
+        if (!(p >>= parse_block(p, block, true)))
+        {
+            return start;
+        }
+
+        foa.block = new AstBlock{std::move(block)};
+
+        out_statement = new AstForLoop{std::move(foa)};
         return p;
     }
 
@@ -414,7 +485,7 @@ Parser parse_proc_signature(Parser p, AstProcedureSignature &out_signature)
         }
 
         arg.is_procedure_argument = true;
-        out_signature.arguments.push_back(std::move(arg));
+        out_signature.arguments.push_back(new AstDeclaration{std::move(arg)});
 
         if (!(p >>= p.quiet().parse_token(Tt::comma)))
         {
@@ -436,10 +507,13 @@ Parser parse_proc(Parser p, AstProcedure &out_proc)
 {
     auto start = p;
 
-    if (!(p >>= parse_proc_signature(p.quiet(), out_proc.signature)))
+    AstProcedureSignature signature{};
+    if (!(p >>= parse_proc_signature(p.quiet(), signature)))
     {
         return start;
     }
+
+    out_proc.signature = new AstProcedureSignature{std::move(signature)};
 
     p.arm("parsing procedure");
 
@@ -449,10 +523,13 @@ Parser parse_proc(Parser p, AstProcedure &out_proc)
         return p;
     }
 
-    if (!(p >>= parse_block(p, out_proc.body, true)))  // TODO: allow_raw_statement?...
+    AstBlock body{};
+    if (!(p >>= parse_block(p, body, true)))  // TODO: allow_raw_statement?...
     {
         return start;
     }
+
+    out_proc.body = new AstBlock{std::move(body)};
 
     return p;
 }
@@ -752,10 +829,10 @@ Parser parse_binary_expr(Parser p, AstNode *&out_node, int prev_prec)
             return start;
         }
 
-        auto bin_op  = new AstBinaryOperator{};
-        bin_op->type = op.type;
-        bin_op->lhs  = lhs;
-        bin_op->rhs  = rhs;
+        auto bin_op           = new AstBinaryOperator{};
+        bin_op->operator_type = op.type;
+        bin_op->lhs           = lhs;
+        bin_op->rhs           = rhs;
 
         lhs = bin_op;
     }
@@ -874,6 +951,8 @@ Parser parse_module(Parser p, AstModule &out_module)
 
     p.arm("parsing module");
 
+    out_module.block = new AstBlock{};
+
     while (true)
     {
         AstDeclaration decl{};
@@ -882,7 +961,7 @@ Parser parse_module(Parser p, AstModule &out_module)
             return start;
         }
 
-        out_module.block.statements.push_back(new AstDeclaration{decl});
+        out_module.block->statements.push_back(new AstDeclaration{decl});
 
         if (p.peek_token().type == Tt::eof)
         {
@@ -893,17 +972,18 @@ Parser parse_module(Parser p, AstModule &out_module)
     return p;
 }
 
-bool parse_module(std::string_view source, AstModule &prog)
+AstModule *parse_module(std::string_view source)
 {
     Lexer lexer{source};
     Parser p{lexer};
 
-    if (!(p >>= parse_module(p, prog)))
+    AstModule module{};
+    if (!(p >>= parse_module(p, module)))
     {
         std::cout << "Compilation failed" << std::endl;
 
-        return false;
+        return nullptr;
     }
 
-    return true;
+    return new AstModule{std::move(module)};
 }

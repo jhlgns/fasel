@@ -1,4 +1,5 @@
 #include "compile_ir.h"
+#include "desugar.h"
 #include "jit.h"
 #include "parse.h"
 #include "string_util.h"
@@ -45,17 +46,19 @@ int main(int argc, char **argv)
     }
 #endif
 
-    AstModule module{};
-    if (parse_module(source, module) == false)
+    Context ctx{};
+
+    auto module = parse_module(source);
+    if (module == nullptr)
     {
         std::cout << "Parsing failed" << std::endl;
         return 1;
     }
 
-    Context ctx{};
+    module = ast_cast<AstModule, true>(desugar(ctx.pool, module));
 
     NodeConverter node_converter{ctx};
-    auto module_node = node_cast<ModuleNode>(node_converter.make_node(&module));
+    auto module_node = node_cast<ModuleNode>(node_converter.make_node(module));
 
     DeclarationRegistrar registrar{ctx};
     registrar.register_declarations(module_node);

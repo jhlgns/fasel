@@ -160,7 +160,7 @@ struct BlockNode : NodeOfKind<NodeKind::block>
     BlockNode *parent_block{};
     CompilerErrorKind expected_compiler_error_kind{};
 
-    std::unordered_map<std::string, DeclarationNode *> declarations{};
+    std::unordered_map<std::string, DeclarationNode *> declarations{};  // TODO: We don't even need this, remove it
 
     inline bool is_global() const { return this->parent_block == nullptr; }
 
@@ -189,6 +189,7 @@ struct WhileLoopNode : NodeOfKind<NodeKind::while_loop>
 {
     Node *condition{};
     BlockNode *body{};
+    Node *prologue{};
 };
 
 struct BreakStatementNode : NodeOfKind<NodeKind::break_statement>

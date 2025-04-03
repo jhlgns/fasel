@@ -29,6 +29,7 @@ struct IrCompiler
     Module &module;
     IRBuilder<llvm::NoFolder> ir;
     // IRBuilder<> ir;
+    std::vector<Node *> current_prologue{};
     BasicBlock *current_break_target{};
     BasicBlock *current_continue_target{};
 
@@ -380,19 +381,32 @@ struct IrCompiler
             return nullptr;
         }
 
-        for (auto statement : block->statements)
+        for (auto i = 0; i < block->statements.size(); ++i)
         {
-            this->generate_code(statement);
+            auto statement = block->statements[i];
 
             auto is_terminator = statement->kind == NodeKind::break_statement ||
                                  statement->kind == NodeKind::continue_statement ||
                                  statement->kind == NodeKind::return_statement;
             if (is_terminator)
             {
-                // TODO: It is weird that this has to be done, but the unconditional 'br'
-                // instruction seems to be ignored if there are other instructions following,
-                // for example after a loop break
+                for (auto prologue_statement : this->current_prologue)
+                {
+                    this->generate_code(prologue_statement);
+                }
+
+                this->generate_code(statement);
                 break;
+            }
+
+            this->generate_code(statement);
+
+            if (i + 1 == block->statements.size())
+            {
+                for (auto prologue_statement : this->current_prologue)
+                {
+                    this->generate_code(prologue_statement);
+                }
             }
         }
 
@@ -515,6 +529,17 @@ struct IrCompiler
 
     Value *generate_code(WhileLoopNode *whyle)
     {
+        auto old_prologue_size = this->current_prologue.size();
+        defer
+        {
+            this->current_prologue.resize(old_prologue_size);
+        };
+
+        if (whyle->prologue != nullptr)
+        {
+            this->current_prologue.push_back(whyle->prologue);
+        }
+
         auto function = this->ir.GetInsertBlock()->getParent();
 
         auto head_block = BasicBlock::Create(this->llvm_context, "while_head", function);
@@ -809,7 +834,7 @@ struct IrCompiler
             case NodeKind::type_cast:           return this->generate_code(static_cast<TypeCastNode *>(node));
 
             case NodeKind::array_type:          UNREACHED;
-            case NodeKind::nop:                 UNREACHED;
+            case NodeKind::nop:                 return nullptr;
             case NodeKind::pointer_type:        UNREACHED;
             case NodeKind::procedure_signature: UNREACHED;
             case NodeKind::basic_type:          UNREACHED;

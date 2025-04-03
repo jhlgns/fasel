@@ -16,10 +16,4 @@ struct MemoryPool
     void reset(char *where);
 };
 
-// template<typename... Args>
-// std::string_view tprint(size_t cap, std::format_string<Args...> format, Args &&...args)
-// {
-//     /1* assert(cap >= format.size()); *1/
-//     auto buffer = arena_alloc_span(cap);
-//     std::format_to_n(buffer, cap, format, std::forward<Args>(args)...);
-// }
+void *operator new(size_t size, MemoryPool &pool);

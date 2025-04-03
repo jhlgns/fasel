@@ -83,7 +83,7 @@ Node *NodeConverter::make_node(AstNode *ast)
 
             assert(lhs != nullptr && rhs != nullptr);
 
-            return this->ctx.make_binary_operator(bin_op->type, lhs, rhs);
+            return this->ctx.make_binary_operator(bin_op->operator_type, lhs, rhs);
         }
 
         case AstKind::block:
@@ -145,7 +145,7 @@ Node *NodeConverter::make_node(AstNode *ast)
             auto yf = static_cast<AstIfStatement *>(ast);
 
             auto condition  = this->make_node(yf->condition);
-            auto then_block = node_cast<BlockNode, true>(this->make_node(&yf->then_block));
+            auto then_block = node_cast<BlockNode, true>(this->make_node(yf->then_block));
 
             BlockNode *else_block{};
             if (yf->else_block != nullptr)
@@ -161,10 +161,50 @@ Node *NodeConverter::make_node(AstNode *ast)
             auto whyle = static_cast<AstWhileLoop *>(ast);
 
             auto condition = this->make_node(whyle->condition);
-            auto block     = node_cast<BlockNode, true>(this->make_node(&whyle->block));
+            auto block     = node_cast<BlockNode, true>(this->make_node(whyle->block));
 
-            return this->ctx.make_while(condition, block);
+            Node *prologue{};
+            if (whyle->prologue != nullptr)
+            {
+                prologue = this->make_node(whyle->prologue);
+            }
+
+            return this->ctx.make_while(condition, block, prologue);
         }
+
+#if 0
+        case AstKind::for_loop:
+        {
+            auto foa = static_cast<AstForLoop *>(ast);
+
+            Node *range_begin{};
+            if (foa->range_begin != nullptr)
+            {
+                range_begin = this->make_node(foa->range_begin);
+            }
+            else
+            {
+                range_begin = this->ctx.make_nop();
+            }
+
+            auto comparison_operator = foa->comparison_operator;
+            auto range_end           = this->make_node(foa->range_end);
+
+            Node *step{};
+            if (foa->step != nullptr)
+            {
+                step = this->make_node(foa->step);
+            }
+            else
+            {
+                step = this->ctx.make_nop();
+            }
+
+            auto block = node_cast<BlockNode, true>(this->make_node(&foa->block));
+
+            return this->ctx.make_for(foa->identifier.text(), range_begin, comparison_operator, range_end, step, block);
+        }
+#endif
 
         case AstKind::literal:
         {
@@ -176,12 +216,12 @@ Node *NodeConverter::make_node(AstNode *ast)
         {
             auto proc = static_cast<AstProcedure *>(ast);
 
-            auto signature = node_cast<ProcedureSignatureNode, true>(this->make_node(&proc->signature));
+            auto signature = node_cast<ProcedureSignatureNode, true>(this->make_node(proc->signature));
 
             BlockNode *body{};
             if (proc->is_external == false)
             {
-                body = node_cast<BlockNode, true>(this->make_node(&proc->body));
+                body = node_cast<BlockNode, true>(this->make_node(proc->body));
             }
 
             return this->ctx.make_procedure(signature, body, proc->is_external);
@@ -209,7 +249,7 @@ Node *NodeConverter::make_node(AstNode *ast)
 
             for (auto argument : signature->arguments)
             {
-                auto argument_node = node_cast<DeclarationNode, true>(this->make_node(&argument));
+                auto argument_node = node_cast<DeclarationNode, true>(this->make_node(argument));
                 arguments.push_back(argument_node);
             }
 
@@ -239,7 +279,7 @@ Node *NodeConverter::make_node(AstNode *ast)
         {
             auto module = static_cast<AstModule *>(ast);
 
-            auto block = node_cast<BlockNode, true>(this->make_node(&module->block));
+            auto block = node_cast<BlockNode, true>(this->make_node(module->block));
 
             return this->ctx.make_module(block);
         }
@@ -303,6 +343,11 @@ Node *NodeConverter::make_node(AstNode *ast)
         case AstKind::continue_statement:
         {
             return this->ctx.make_continue();
+        }
+
+        case AstKind::for_loop:
+        {
+            UNREACHED;  // Handled by desugaring
         }
     }
 
@@ -821,6 +866,7 @@ void TypeChecker::typecheck_internal(Node *node)
                 return;
             }
 
+            this->typecheck(whyle->prologue);
             this->typecheck(whyle->body);
 
             return;
@@ -1050,10 +1096,31 @@ void TypeChecker::typecheck_internal(Node *node)
         }
 
         case NodeKind::basic_type:
+        {
+            node->set_inferred_type(&BuiltinTypes::type);
+        }
+
         case NodeKind::pointer_type:
+        {
+            auto pointer = static_cast<PointerTypeNode *>(node);
+            pointer->set_inferred_type(&BuiltinTypes::type);
+
+            this->typecheck(pointer->target_type);
+        }
+
         case NodeKind::array_type:
+        {
+            auto array = static_cast<ArrayTypeNode *>(node);
+            array->set_inferred_type(&BuiltinTypes::type);
+
+            this->typecheck(array->length);
+            this->typecheck(array->element_type);
+        }
+
         case NodeKind::struct_type:
         {
+            TODO;
+
             node->set_inferred_type(&BuiltinTypes::type);
 
             return;

@@ -43,3 +43,8 @@ void MemoryPool::reset(char *where)
 
     this->cursor = where;
 }
+
+void *operator new(size_t size, MemoryPool &pool)
+{
+    return pool.allocate(size);
+}

@@ -18,7 +18,7 @@ struct Context
         bool is_procedure_argument);
     IdentifierNode *make_identifier(std::string_view identifier);
     IfStatementNode *make_if(Node *condition, BlockNode *then_block, BlockNode *else_block);
-    WhileLoopNode *make_while(Node *condition, BlockNode *block);
+    WhileLoopNode *make_while(Node *condition, BlockNode *block, Node *prologue);
     BreakStatementNode *make_break();
     ContinueStatementNode *make_continue();
     LiteralNode *make_literal(std::variant<bool, uint64_t, float, double, std::string> value, char suffix);

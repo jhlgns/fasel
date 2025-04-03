@@ -1,0 +1,8 @@
+[x] For loops
+[ ] Remove AstTypeIdentifier
+[ ] Arithmetic assignment operators +=, ...
+[ ] Pointer stuff
+[ ] Unary operators
+[ ] Match-expressions
+[ ] Goto
+[ ] Local procedures
