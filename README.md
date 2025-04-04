@@ -19,16 +19,6 @@ Here are some characteristics that make up this language:
 * Statically typed with fewer implicit casts than other languages [sic]
 * It will compile to all major CPU architectures, including AMD64, X86, ARM, WASM, RISC-V - [most of the ones that LLVM supports](https://github.com/llvm/llvm-project/tree/main/llvm/lib/Target).
 
-## The Design Phiosophy of This Language
-
-Some people say LLMs are great for programming because they save you from writing low-entropy code.
-
-They are likely trying to sell you their product or the product they have been manipulated to buy into. Don't listen to them. The solution is much simpler and does not involve billion-dollar companies pretending to be able to replace your ability to think by selling you paid subscriptions to stochastic parrots consuming a bazillion watts of energy to operate.
-
-> **Choose a language that let's you express your ideas in code with an entropy as close to 1 as possible. Don't _ever_ write boilerplate code. The need to write boilerplate code means you are using unfitting tools for your job. If explaining the problem to an LLM is easier than you explaining it to the compiler, your compiler and/or your tech stack is crap, as simple as that.**
-
-Fasel will be highly expressive and is designed for ergonomy. It is designed so that you have to type the least amount of characters in order to solve a programming problem - while still reading like a poem. And while following this ambition, it stays a general purpose language. It will achieve this by being customizable and extendable.
-
 ## Progress And Documentation
 
 You can find example programs that serve as integration tests in the [integration-tests](./integration-tests) folder.
