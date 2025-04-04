@@ -1,5 +1,7 @@
 # Fasel
 
+> **THIS REPOSITORY WAS MOVED TO [git.janh.me](https://git.janh.me/jhlgns/fasel.git)**
+
 _**F**ast **A**nd **S**imple **E**ngramming **L**anguage_ - or from German verb "_faseln_" (to babble)
 
 > **Early work in progress!**
